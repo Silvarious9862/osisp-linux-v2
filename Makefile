@@ -41,4 +41,4 @@ release:
 	$(MAKE) BUILD=release all
 
 clean:
-	rm -rf ./out
+	rm -rf ./build

@@ -1,4 +1,5 @@
 #include "dirwalk.h"
+#include "options.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <locale.h>
+#include <signal.h>
 
 #define INITIAL_CAPACITY 128
 
@@ -16,6 +18,37 @@ typedef struct {
     size_t size;
     size_t capacity;
 } FileList;
+
+/* Прототип для функции, используемой в обработчике сигнала */
+static void free_file_list(FileList *list);
+
+/* Глобальный указатель на список файлов, который будет очищаться при SIGINT */
+static FileList *g_file_list = NULL;
+
+/* Обработчик SIGINT: очищает выделенную память и завершает работу */
+static void sigint_handler(int signum) {
+    (void)signum;  // чтобы избежать предупреждения о неиспользуемом параметре
+    if (g_file_list) {
+        free_file_list(g_file_list);
+        g_file_list = NULL;
+    }
+    fprintf(stderr, "\nПолучен SIGINT (Ctrl-C). Освобождаю ресурсы и завершаю работу...\n");
+    exit(EXIT_FAILURE);
+}
+
+/* Регистрация обработчика SIGINT */
+static void register_sigint_handler(void) {
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0; // Можно добавить SA_RESTART, если требуется перезапуск прерванных системных вызовов
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/* --- Работа со списком файлов --- */
 
 static FileList* create_file_list(void) {
     FileList *list = malloc(sizeof(FileList));
@@ -103,7 +136,6 @@ static void dirwalk_internal(const char *dir, const Options *opts, FileList *lis
          if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                continue;
 
-         /* Вычисляем длину строки для выделения памяти с учетом необходимости слэша */
          size_t dir_len = strlen(dir);
          int need_slash = (dir[dir_len - 1] == '/') ? 0 : 1;
          size_t path_len = dir_len + need_slash + strlen(entry->d_name) + 1; // +1 для нулевого символа
@@ -114,8 +146,6 @@ static void dirwalk_internal(const char *dir, const Options *opts, FileList *lis
                closedir(dp);
                exit(EXIT_FAILURE);
          }
-
-         /* Формируем строку пути с условием добавления слэша */
          if (need_slash)
              snprintf(path, path_len, "%s/%s", dir, entry->d_name);
          else
@@ -136,12 +166,17 @@ static void dirwalk_internal(const char *dir, const Options *opts, FileList *lis
 }
 
 void dirwalk(const char *start_dir, const Options *opts) {
-    /* Устанавливаем локаль для корректной сортировки, если задана опция -s */
+    /* Регистрируем обработчик SIGINT */
+    register_sigint_handler();
+
     if (opts->sort) {
          setlocale(LC_COLLATE, "");
     }
     
     FileList *list = create_file_list();
+    /* Сохраняем список в глобальный указатель для потенциального освобождения из обработчика */
+    g_file_list = list;
+    
     dirwalk_internal(start_dir, opts, list);
     
     if (opts->sort) {
@@ -150,4 +185,5 @@ void dirwalk(const char *start_dir, const Options *opts) {
     
     print_file_list(list);
     free_file_list(list);
+    g_file_list = NULL;  // Обнуляем глобальный указатель после нормального завершения
 }
