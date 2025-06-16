@@ -3,7 +3,7 @@ BUILD ?= debug
 # Каталоги
 SRC_DIR := ./src
 INC_DIR := ./include
-OUT_DIR := ./out/$(BUILD)
+OUT_DIR := ./build/$(BUILD)
 
 # Имя бинарного файла
 TARGET := $(OUT_DIR)/dirwalk
