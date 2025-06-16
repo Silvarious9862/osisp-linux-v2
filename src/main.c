@@ -93,6 +93,15 @@ void print_status() {
     printf("Производителей: %d, Потребителей: %d\n", producer_count, consumer_count);
 }
 
+// Обработчик SIGINT для корректной очистки IPC-ресурсов
+static void sigint_handler(int sig) {
+    (void)sig; // Игнорируем параметр
+    printf("\nПолучен SIGINT. Запускается очистка ресурсов...\n");
+    cleanup_resources();
+    printf("Ресурсы очищены. Завершается программа.\n");
+    exit(0);
+}
+
 // Обработка команд пользователя
 void handle_commands() {
     char command[10];
@@ -140,6 +149,16 @@ void handle_commands() {
 }
 
 int main() {
+    // Регистрируем обработчик SIGINT (Ctrl-C)
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+         perror("sigaction");
+         exit(1);
+    }
+
     printf("Запуск основного процесса.\n");
     init_resources();
 
