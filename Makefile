@@ -50,4 +50,4 @@ release:
 	$(MAKE) BUILD=release all
 
 clean:
-	rm -rf $(OUT_DIR)
+	rm -rf ./build
