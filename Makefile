@@ -4,7 +4,7 @@ BUILD ?= debug
 # Каталоги
 SRC_DIR := ./src
 LIB_DIR := ./include
-OUT_DIR := ./out/$(BUILD)
+OUT_DIR := ./build/$(BUILD)
 
 # Имена бинарных файлов
 TARGET_GEN := $(OUT_DIR)/gen
@@ -65,5 +65,5 @@ release:
 
 # Очистка каталога с бинарными файлами
 clean:
-	rm -rf ./out
+	rm -rf $(OUT_DIR)
 	rm -f test/testfile
