@@ -4,17 +4,28 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 #include "common.h"
 #include "queue.h"
 #include "producer_consumer.h"
 
-// Глобальные переменные
-volatile int terminate_flag = 0;
-MessageQueue queue;
-
 #define MAX_THREADS 100
 
+volatile int terminate_flag = 0;
+static void sigint_handler(int sig);
+MessageQueue queue;
+
 int main() {
+    // Регистрация обработчика SIGINT без SA_RESTART:
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;          // объявим обработчик ниже
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0; // не используем SA_RESTART
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+         perror("Ошибка sigaction");
+         exit(1);
+    }
+    
     srand(time(NULL));
     if (init_queue(&queue, INITIAL_CAPACITY) != 0) {
         perror("Ошибка инициализации очереди");
@@ -111,4 +122,15 @@ int main() {
     destroy_queue(&queue);
     printf("Программа завершена.\n");
     return 0;
+}
+
+// Определение обработчика SIGINT
+static void sigint_handler(int sig) {
+    (void)sig;  // подавляем предупреждение
+    printf("\nПолучен SIGINT. Запускается завершение работы...\n");
+    terminate_flag = 1;
+    pthread_mutex_lock(&queue.mutex);
+    pthread_cond_broadcast(&queue.not_empty);
+    pthread_cond_broadcast(&queue.not_full);
+    pthread_mutex_unlock(&queue.mutex);
 }
