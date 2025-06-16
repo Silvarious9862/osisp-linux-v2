@@ -5,6 +5,8 @@
 #include <semaphore.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
+#include <string.h>
 #include "common.h"
 #include "thread_queue.h"
 #include "producer_consumer.h"
@@ -28,7 +30,35 @@ void print_status() {
     pthread_mutex_unlock(&queue.mutex);
 }
 
+// Обработчик SIGINT (Ctrl-C)
+static void sigint_handler(int sig) {
+    (void)sig;  // подавляем предупреждение о неиспользуемом параметре
+    printf("\nПолучен SIGINT. Запускается завершение работы...\n");
+    terminate_flag = 1;
+}
+
+// Поток для периодической проверки дедлоков
+void* deadlock_monitor(void* arg) {
+    while (!terminate_flag) {
+        // Например, можно добавить проверку состояния очереди
+        if (queue.count == 0 && queue.added_count > 0)
+            printf("--- Нет элементов в очереди, проверьте работу производителей ---\n");
+        sleep(5);
+    }
+    return NULL;
+}
+
 int main() {
+    // Регистрация обработчика SIGINT
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0; // для перезапуска некоторых системных вызовов
+    if(sigaction(SIGINT, &sa, NULL) == -1) {
+        perror("Ошибка sigaction");
+        exit(1);
+    }
+    
     srand(time(NULL));
     if (init_thread_queue(&queue, 10) != 0) {
         perror("Ошибка инициализации очереди");
@@ -46,6 +76,9 @@ int main() {
     printf("  < : уменьшить размер очереди\n");
     printf("  p : вывести состояние очереди\n");
     printf("  q : завершение работы\n");
+    
+    pthread_t monitor_thread;
+    pthread_create(&monitor_thread, NULL, deadlock_monitor, NULL);
     
     while (fgets(command, sizeof(command), stdin) != NULL) {
         if (command[0] == 'q') {
@@ -109,12 +142,15 @@ int main() {
         }
     }
     
+    // Дожидаемся завершения всех потоков
     for (int i = 0; i < prod_count; i++) {
         pthread_join(producers[i], NULL);
     }
     for (int i = 0; i < cons_count; i++) {
         pthread_join(consumers[i], NULL);
     }
+    
+    pthread_join(monitor_thread, NULL);
     
     destroy_thread_queue(&queue);
     printf("Программа завершена.\n");
