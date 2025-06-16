@@ -10,5 +10,5 @@ export LC_COLLATE=C
 export PATH=/usr/bin:/bin
 
 
-export CHILD_PATH=$(pwd)/out/release
+export CHILD_PATH=$(pwd)/build/release
 
