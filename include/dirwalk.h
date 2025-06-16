@@ -3,6 +3,7 @@
 
 #include "options.h"
 
+// Запуск обхода директории с заданными параметрами
 void dirwalk(const char *start_dir, const Options *opts);
 
 #endif // DIRWALK_H

@@ -12,22 +12,19 @@
 
 #define INITIAL_CAPACITY 128
 
-/* Структура для хранения списка найденных путей */
+// Структура списка найденных путей
 typedef struct {
     char **items;
     size_t size;
     size_t capacity;
 } FileList;
 
-/* Прототип для функции, используемой в обработчике сигнала */
-static void free_file_list(FileList *list);
-
-/* Глобальный указатель на список файлов, который будет очищаться при SIGINT */
+// Глобальный список файлов для очистки при SIGINT
 static FileList *g_file_list = NULL;
 
-/* Обработчик SIGINT: очищает выделенную память и завершает работу */
+// Обработчик SIGINT: очищает память и завершает программу
 static void sigint_handler(int signum) {
-    (void)signum;  // чтобы избежать предупреждения о неиспользуемом параметре
+    (void)signum; // Избегаем предупреждений
     if (g_file_list) {
         free_file_list(g_file_list);
         g_file_list = NULL;
@@ -36,154 +33,147 @@ static void sigint_handler(int signum) {
     exit(EXIT_FAILURE);
 }
 
-/* Регистрация обработчика SIGINT */
+// Регистрация обработчика SIGINT
 static void register_sigint_handler(void) {
     struct sigaction sa;
     sa.sa_handler = sigint_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0; // Можно добавить SA_RESTART, если требуется перезапуск прерванных системных вызовов
+    sa.sa_flags = 0; // Можно добавить SA_RESTART
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         perror("sigaction");
         exit(EXIT_FAILURE);
     }
 }
 
-/* --- Работа со списком файлов --- */
-
+// Создание списка файлов
 static FileList* create_file_list(void) {
     FileList *list = malloc(sizeof(FileList));
     if (!list) {
-         perror("malloc");
-         exit(EXIT_FAILURE);
+        perror("malloc");
+        exit(EXIT_FAILURE);
     }
     list->capacity = INITIAL_CAPACITY;
     list->size = 0;
     list->items = malloc(list->capacity * sizeof(char *));
     if (!list->items) {
-         perror("malloc");
-         exit(EXIT_FAILURE);
+        perror("malloc");
+        exit(EXIT_FAILURE);
     }
     return list;
 }
 
+// Добавление пути в список
 static void add_to_list(FileList *list, const char *path) {
     if (list->size >= list->capacity) {
-         list->capacity *= 2;
-         list->items = realloc(list->items, list->capacity * sizeof(*list->items));
-         if (!list->items) {
-             perror("realloc");
-             exit(EXIT_FAILURE);
-         }
+        list->capacity *= 2;
+        list->items = realloc(list->items, list->capacity * sizeof(*list->items));
+        if (!list->items) {
+            perror("realloc");
+            exit(EXIT_FAILURE);
+        }
     }
     list->items[list->size] = strdup(path);
     if (!list->items[list->size]) {
-         perror("strdup");
-         exit(EXIT_FAILURE);
+        perror("strdup");
+        exit(EXIT_FAILURE);
     }
     list->size++;
 }
 
+// Сравнение строк для сортировки
 static int cmp_str(const void *a, const void *b) {
-    const char *str_a = *(const char **)a;
-    const char *str_b = *(const char **)b;
-    return strcoll(str_a, str_b);
+    return strcoll(*(const char **)a, *(const char **)b);
 }
 
+// Освобождение списка файлов
 static void free_file_list(FileList *list) {
     for (size_t i = 0; i < list->size; i++) {
-         free(list->items[i]);
+        free(list->items[i]);
     }
     free(list->items);
     free(list);
 }
 
+// Вывод списка файлов
 static void print_file_list(const FileList *list) {
     for (size_t i = 0; i < list->size; i++) {
-         printf("%s\n", list->items[i]);
+        printf("%s\n", list->items[i]);
     }
 }
 
-/* Функция фильтрации – проверяет, соответствует ли файл заданным опциям */
+// Проверка соответствия файла заданным опциям
 static int match_type(const char *path, const Options *opts) {
     struct stat sb;
     if (lstat(path, &sb) == -1) {
         perror(path);
         return 0;
     }
-    /* Если ни одна из опций не установлена, выводим все типы объектов */
     if (!opts->type_files && !opts->type_dirs && !opts->type_links)
-         return 1;
+        return 1;
 
     if (opts->type_files && S_ISREG(sb.st_mode))
-         return 1;
+        return 1;
     if (opts->type_dirs && S_ISDIR(sb.st_mode))
-         return 1;
+        return 1;
     if (opts->type_links && S_ISLNK(sb.st_mode))
-         return 1;
-    
+        return 1;
+
     return 0;
 }
 
-/* Внутренняя функция обхода каталога */
+// Рекурсивный обход каталога
 static void dirwalk_internal(const char *dir, const Options *opts, FileList *list) {
     DIR *dp = opendir(dir);
-    if (dp == NULL) {
-         perror(dir);
-         return;
+    if (!dp) {
+        perror(dir);
+        return;
     }
+
     struct dirent *entry;
     while ((entry = readdir(dp)) != NULL) {
-         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-               continue;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
 
-         size_t dir_len = strlen(dir);
-         int need_slash = (dir[dir_len - 1] == '/') ? 0 : 1;
-         size_t path_len = dir_len + need_slash + strlen(entry->d_name) + 1; // +1 для нулевого символа
+        size_t dir_len = strlen(dir);
+        int need_slash = (dir[dir_len - 1] == '/') ? 0 : 1;
+        size_t path_len = dir_len + need_slash + strlen(entry->d_name) + 1;
 
-         char *path = malloc(path_len);
-         if (path == NULL) {
-               perror("malloc");
-               closedir(dp);
-               exit(EXIT_FAILURE);
-         }
-         if (need_slash)
-             snprintf(path, path_len, "%s/%s", dir, entry->d_name);
-         else
-             snprintf(path, path_len, "%s%s", dir, entry->d_name);
+        char *path = malloc(path_len);
+        if (!path) {
+            perror("malloc");
+            closedir(dp);
+            exit(EXIT_FAILURE);
+        }
+        snprintf(path, path_len, "%s%s%s", dir, need_slash ? "/" : "", entry->d_name);
 
-         if (match_type(path, opts)) {
-               add_to_list(list, path);
-         }
+        if (match_type(path, opts))
+            add_to_list(list, path);
 
-         /* Если объект – каталог, заходим в него рекурсивно */
-         struct stat sb;
-         if (lstat(path, &sb) == 0 && S_ISDIR(sb.st_mode)) {
-              dirwalk_internal(path, opts, list);
-         }
-         free(path);
+        struct stat sb;
+        if (lstat(path, &sb) == 0 && S_ISDIR(sb.st_mode))
+            dirwalk_internal(path, opts, list);
+
+        free(path);
     }
     closedir(dp);
 }
 
+// Запуск обхода каталога
 void dirwalk(const char *start_dir, const Options *opts) {
-    /* Регистрируем обработчик SIGINT */
     register_sigint_handler();
 
-    if (opts->sort) {
-         setlocale(LC_COLLATE, "");
-    }
-    
+    if (opts->sort)
+        setlocale(LC_COLLATE, "");
+
     FileList *list = create_file_list();
-    /* Сохраняем список в глобальный указатель для потенциального освобождения из обработчика */
     g_file_list = list;
-    
+
     dirwalk_internal(start_dir, opts, list);
-    
-    if (opts->sort) {
-         qsort(list->items, list->size, sizeof(char *), cmp_str);
-    }
-    
+
+    if (opts->sort)
+        qsort(list->items, list->size, sizeof(char *), cmp_str);
+
     print_file_list(list);
     free_file_list(list);
-    g_file_list = NULL;  // Обнуляем глобальный указатель после нормального завершения
+    g_file_list = NULL;
 }
