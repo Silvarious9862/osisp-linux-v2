@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #include "scan.h"    // Доработанный модуль отображения файла с новой сигнатурой scan_file_segment()
 #include "sort.h"    // Модуль сортировки блоков
@@ -14,10 +15,31 @@
 #include "write.h"   // Модуль записи результата в файл
 #include "finish.h"  // Модуль очистки синхронизационных объектов
 
+volatile int terminate_flag = 0;
+scan_data *current_seg = NULL;
+/* Обработчик SIGINT (без SA_RESTART) - только устанавливает флаг */
+static void sigint_handler(int sig) {
+    (void)sig;  // подавляем предупреждение
+    printf("\nПолучен SIGINT. Запускается завершение работы...\n");
+    terminate_flag = 1;
+    /* Не делаем освобождение здесь, так как free() не является async-signal-safe.
+       Освобождение будет выполнено в основном цикле, когда поток обнаружит установленный флаг. */
+}
+
 int main(int argc, char *argv[]) {
     if (argc != 5) {
         fprintf(stderr, "Usage: %s memsize granul threads filename\n", argv[0]);
         return EXIT_FAILURE;
+    }
+
+    /* Регистрация обработчика SIGINT */
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;  // не используем SA_RESTART — блокирующие вызовы прерываются
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        perror("Ошибка регистрации SIGINT");
+        exit(EXIT_FAILURE);
     }
 
     /* Чтение параметров запуска */

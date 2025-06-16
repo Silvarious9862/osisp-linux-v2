@@ -6,6 +6,10 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <stdint.h>
+
+/* Предполагается, что глобальный флаг terminate_flag объявлен в общем модуле */
+extern volatile int terminate_flag;
 
 /**
  * scan_file_segment() – отображает в память часть файла с учетом выравнивания.
@@ -23,10 +27,22 @@ scan_data *scan_file_segment(const char *filename, size_t map_length, off_t map_
     }
     data->memsize = map_length;
 
+    /* Если флаг завершения уже установлен, освобождаем и выходим */
+    if (terminate_flag) {
+        free(data);
+        return NULL;
+    }
+
     /* Открываем файл для чтения/записи */
     data->fd = open(filename, O_RDWR);
     if (data->fd < 0) {
         fprintf(stderr, "Error opening file %s: %s\n", filename, strerror(errno));
+        free(data);
+        return NULL;
+    }
+
+    if (terminate_flag) {
+        close(data->fd);
         free(data);
         return NULL;
     }
@@ -39,9 +55,17 @@ scan_data *scan_file_segment(const char *filename, size_t map_length, off_t map_
         free(data);
         return NULL;
     }
+    
+    if (terminate_flag) {
+        /* Если мы получили сигнал завершения сразу после mmap(), освобождаем ресурсы */
+        munmap(data->map_ptr, map_length);
+        close(data->fd);
+        free(data);
+        return NULL;
+    }
 
     if (is_first) {
-        /* Извлекаем заголовок (общий число записей) по адресу: map_ptr + adjustment */
+        /* Извлекаем заголовок (общее число записей) по адресу: map_ptr + adjustment */
         data->total_records = *((uint64_t *)((char *)data->map_ptr + adjustment));
         /* Данные начинаются после заголовка */
         data->records = (struct index_s *)((char *)data->map_ptr + adjustment + sizeof(uint64_t));

@@ -5,6 +5,9 @@
 #include <errno.h>
 #include <pthread.h>
 
+/* Предполагается, что глобальный флаг завершения определён в общем модуле */
+extern volatile int terminate_flag;
+
 /* Инициализация структуры merge_data. */
 int merge_init(merge_data *md, struct index_s *records, size_t block_size, int num_blocks, int num_threads) {
     md->records   = records;
@@ -52,15 +55,14 @@ void merge_two_sorted_blocks(struct index_s *block1, size_t n1, struct index_s *
  *
  * Алгоритм фазы слияния:
  * 1. Пока в рассматриваемой области (в merge_data) осталось больше одного блока:
- *    - Определяем число пар для слияния = md->num_blocks / 2.
- *    - Если идентификатор потока (tid) меньше числа пар, то поток сливает пару блоков:
+ *    - Если terminate_flag установлен, потоки синхронизируются на барьере, затем завершают работу.
+ *    - Иначе, определяется число пар для слияния = md->num_blocks / 2.
+ *      Если идентификатор потока (tid) меньше числа пар, то поток сливает пару блоков:
  *         блок с номером 2*tid и блок с номером 2*tid+1.
- *    - Если для потока нет пары (tid >= число пар), поток ничего не делает.
  * 2. Все потоки ждут на барьере.
- * 3. Один из потоков (например, с номером 0) обновляет количество блоков:
- *    new_num_blocks = (md->num_blocks % 2 == 0) ? (md->num_blocks / 2) : (md->num_blocks / 2 + 1);
- *    и увеличивает размер блока в два раза: md->block_size *= 2.
- * 4. Потоки ждут обновления (второй барьер) и переходят к следующей фазе.
+ * 3. Если terminate_flag не установлен, один из потоков (например, с номером 0)
+ *    обновляет общее число блоков и увеличивает размер блока в два раза.
+ * 4. Все потоки ждут второй барьер и переходят к следующей фазе.
  */
 void *merge_blocks_phase(void *arg) {
     merge_thread_arg *marg = (merge_thread_arg *) arg;
@@ -68,6 +70,10 @@ void *merge_blocks_phase(void *arg) {
     merge_data *md = marg->md;
 
     while (md->num_blocks > 1) {
+        /* Если terminate_flag установлен, пропускаем активную фазу слияния */
+        if (terminate_flag)
+            break;
+
         int pairs = md->num_blocks / 2;
         /* Каждый поток, если ему досталась пара, сливает её. */
         if (tid < pairs) {
@@ -75,13 +81,16 @@ void *merge_blocks_phase(void *arg) {
             int right_index = tid * 2 + 1;
             struct index_s *left_block = md->records + left_index * md->block_size;
             struct index_s *right_block = md->records + right_index * md->block_size;
-            
             merge_two_sorted_blocks(left_block, md->block_size, right_block, md->block_size);
         }
         /* Синхронизация: все потоки ждут завершения слияния на этом этапе. */
         pthread_barrier_wait(&md->barrier);
 
-        /* Один поток (например, с номером 0) обновляет общее состояние слияния. */
+        /* Если terminate_flag установлен, продолжим синхронизацию и выйдем */
+        if (terminate_flag)
+            break;
+
+        /* Один поток обновляет состояние */
         if (tid == 0) {
             if (md->num_blocks % 2 == 0)
                 md->num_blocks /= 2;
@@ -89,10 +98,10 @@ void *merge_blocks_phase(void *arg) {
                 md->num_blocks = md->num_blocks / 2 + 1;
             md->block_size *= 2;
         }
-        /* Ожидаем, пока обновление завершат все потоки. */
+        /* Вторая синхронизация, чтобы все потоки дождались обновления */
         pthread_barrier_wait(&md->barrier);
     }
-    /* Финальная синхронизация (опционально). */
+    /* Финальная синхронизация для гарантии освобождения барьера всеми потоками */
     pthread_barrier_wait(&md->barrier);
     return NULL;
 }

@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
+
+// Предполагается, что terminate_flag объявлен глобально в основном модуле
+extern volatile int terminate_flag;
 
 /* Вспомогательная функция сравнения для qsort(). Сравнивает записи по полю time_mark. */
 static int cmp_index(const void *a, const void *b) {
@@ -44,18 +48,26 @@ void *sort_blocks(void *arg) {
 
     /* 1. Первоначальное назначение: поток сортирует блок с номером, равным его идентификатору. */
     block_index = thread_id;
-    if (block_index < sd->num_blocks) {
+    if (block_index < sd->num_blocks && !terminate_flag) {
         struct index_s *block_ptr = sd->records + block_index * sd->block_size;
         qsort(block_ptr, sd->block_size, sizeof(struct index_s), cmp_index);
     }
 
     /* 2. После сортировки первого блока, поток в цикле пытается захватить очередной свободный блок. */
-    while (1) {
+    while (!terminate_flag) {
         pthread_mutex_lock(&sd->mutex);
+        if (terminate_flag) {
+            pthread_mutex_unlock(&sd->mutex);
+            break;
+        }
         block_index = sd->next_block;
         if (block_index < sd->num_blocks) {
             sd->next_block++;  /* резервируем этот блок */
             pthread_mutex_unlock(&sd->mutex);
+
+            /* Если флаг прекращения возник во время ожидания, прерываем работу */
+            if (terminate_flag)
+                break;
 
             struct index_s *block_ptr = sd->records + block_index * sd->block_size;
             qsort(block_ptr, sd->block_size, sizeof(struct index_s), cmp_index);
@@ -65,7 +77,8 @@ void *sort_blocks(void *arg) {
         }
     }
 
-    /* 3. Все потоки синхронизируются по окончании сортировки блоков. */
+    /* 3. Все потоки синхронизируются по окончании сортировки блоков.
+       Если завершение из-за SIGINT, барьер можно всё равно дождаться, чтобы не создавать диссонанса. */
     pthread_barrier_wait(&sd->barrier);
 
     return NULL;

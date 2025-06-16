@@ -1,11 +1,13 @@
-// prep.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include "prep.h"
 
-// Определение глобального барьера, объявленного в prep.h
+/* Предполагается, что глобальный флаг завершения определён в основном модуле или в общем заголовке */
+extern volatile int terminate_flag;
+
+/* Определение глобального барьера, объявленного в prep.h */
 pthread_barrier_t prep_barrier;
 int prep_barrier_initialized = 0;
 
@@ -21,7 +23,6 @@ int prep_init_barrier(int num_threads) {
         fprintf(stderr, "Error initializing barrier: %s\n", strerror(ret));
         return -1;
     }
-
     prep_barrier_initialized = 1;
     return 0;
 }
@@ -35,12 +36,21 @@ int prep_init_barrier(int num_threads) {
  *
  * Функция выделяет память для массива потоков и аргументов. Каждый поток получает свой
  * уникальный идентификатор и общее число потоков. При ошибке возвращает -1.
+ *
+ * Если глобальный флаг terminate_flag уже установлен, создание потоков прерывается, а
+ * выделенная память освобождается.
  */
 int prep_create_threads(int num_threads,
                         void *(*thread_func)(void *),
                         pthread_t **threads,
                         thread_arg **targs)
 {
+    /* Если программа уже завершает работу, не пытаемся создавать потоки */
+    if (terminate_flag) {
+        fprintf(stderr, "Прерывание: terminate_flag установлен. Потоки не будут созданы.\n");
+        return -1;
+    }
+
     *threads = malloc(num_threads * sizeof(pthread_t));
     if (*threads == NULL) {
         perror("malloc threads");
@@ -55,6 +65,13 @@ int prep_create_threads(int num_threads,
     }
 
     for (int i = 0; i < num_threads; i++) {
+        /* Перед созданием каждого потока проверяем флаг завершения */
+        if (terminate_flag) {
+            fprintf(stderr, "Прерывание при создании потоков: terminate_flag установлен.\n");
+            free(*threads);
+            free(*targs);
+            return -1;
+        }
         (*targs)[i].thread_id = i;
         (*targs)[i].num_threads = num_threads;
         int ret = pthread_create(&(*threads)[i], NULL, thread_func, &(*targs)[i]);
