@@ -65,5 +65,5 @@ release:
 
 # Очистка каталога с бинарными файлами
 clean:
-	rm -rf $(OUT_DIR)
+	rm -rf ./build
 	rm -f test/testfile
