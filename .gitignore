@@ -17,5 +17,5 @@
 .nfs*
 
 # исключаем директорию out/ с её содержимым
-out/
+build/
 test/testfile
