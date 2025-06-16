@@ -1,12 +1,12 @@
 
-# FDupes project
+# BDupes project
 Утилита, позволяющая найти дубликаты файлов в указанной директории
 
 ## Перед началом работы  
   
 Убедитесь, что у вас установлены libmagic и openssl
 ```bash
-sudo dnf install libmagic-devel openssl-devel
+sudo dnf install file-devel openssl-devel
 ```
 Соберите проект с использованием **Makefile**
 
@@ -20,7 +20,7 @@ sudo mandb
 
 Добавьте утилиту в системный каталог
 ```bash
-sudo cp bdupes /usr/local/bin/
+sudo cp out/release/bdupes /usr/local/bin/
 ```
 
 ## Использование

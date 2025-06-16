@@ -20,6 +20,8 @@ CC := gcc
 COMMON_CFLAGS := -D_GNU_SOURCE -D_POSIX_C_SOURCE=200112L -W -Wall -Wextra -std=c11 -pedantic \
 				 -Wno-unused-parameter -Wno-unused-variable -I$(LIB_DIR) -lpthread
 
+LIBS := -lcrypto -lmagic -lpthread
+
 # Флаги сборки debug/release
 ifeq ($(BUILD), debug)
 	CFLAGS := $(COMMON_CFLAGS) -g -O0 -fsanitize=address -fno-omit-frame-pointer
@@ -36,7 +38,7 @@ all: $(TARGET)
 
 $(TARGET): $(SRCS)
 	@mkdir -p $(OUT_DIR)
-	$(CC) $(CFLAGS) -o $@ $(SRCS)
+	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LIBS)
 
 # Псевдонимы для debug/release
 debug:
