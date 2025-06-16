@@ -8,15 +8,14 @@ Options parse_arguments(int argc, char *argv[]) {
     Options opts = {0, 0, 0, 0, 0, 0, 0, 0, 0, NULL};
     int index = 1;
 
-    // Обрабатываем все аргументы, начинающиеся с '-'
+    // Разбор аргументов командной строки
     while (index < argc && argv[index][0] == '-' && argv[index][1] != '\0') {
-        // Если аргумент равен "--", прекращаем разбор опций
-        if (strcmp(argv[index], "--") == 0) {
+        if (strcmp(argv[index], "--") == 0) {  // Завершение обработки опций
             index++;
             break;
         }
 
-        // Перебираем каждый символ после дефиса
+        // Чтение символов флага
         for (int i = 1; argv[index][i] != '\0'; i++) {
             switch (argv[index][i]) {
                 case 'r': opts.recursive = 1;   break;
@@ -26,29 +25,23 @@ Options parse_arguments(int argc, char *argv[]) {
                 case 'v': opts.verbose = 1;     break;
                 case 'd': opts.deletion = 1;    break;
                 case 'n': opts.no_interact = 1; break;
-                case 'G': {
-					/* Обрабатываем флаг -G, ожидающий значение минимального размера.
-                       Если после 'G' в той же строке нет числа, берем следующий аргумент. */
+                case 'G': {  // Установка минимального размера
                     char *value = &argv[index][i+1];
                     if (*value == '\0') {
-                        index++;
-                        if (index >= argc) {
+                        if (++index >= argc) {
                             fprintf(stderr, "Не указан аргумент для -G\n");
                             exit(EXIT_FAILURE);
                         }
                         value = argv[index];
                     }
                     opts.min_size = strtoull(value, NULL, 10);
-                    i = strlen(argv[index]) - 1;  // Пропускаем оставшуюся часть текущего аргумента
+                    i = strlen(argv[index]) - 1;
                     break;
                 }
-                case 'L': {
-                    /* Обрабатываем флаг -L, ожидающий значение максимального размера.
-                       Если число не указано сразу, берем следующий аргумент. */
+                case 'L': {  // Установка максимального размера
                     char *value = &argv[index][i+1];
                     if (*value == '\0') {
-                        index++;
-                        if (index >= argc) {
+                        if (++index >= argc) {
                             fprintf(stderr, "Не указан аргумент для -L\n");
                             exit(EXIT_FAILURE);
                         }
@@ -72,7 +65,7 @@ Options parse_arguments(int argc, char *argv[]) {
     }
     opts.start_path = argv[index];
 
-    // Проверяем, что указанный путь существует и является директорией
+    // Проверка корректности пути
     struct stat statbuf;
     if (stat(opts.start_path, &statbuf) != 0 || !S_ISDIR(statbuf.st_mode)) {
         fprintf(stderr, "Указанный путь некорректен или не является директорией: %s\n", opts.start_path);

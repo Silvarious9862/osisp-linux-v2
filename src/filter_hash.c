@@ -5,37 +5,35 @@
 #include <openssl/md5.h>
 #include "verbose.h"
 
-/* Определение структуры file_entry */
+// Структура file_entry для хранения пути и размера файла
 typedef struct {
     char full_path[PATH_MAX];
     off_t file_size;
 } file_entry;
 
-/* Объявление глобальных переменных */
+// Глобальные переменные
 extern file_entry *file_list;
 extern size_t file_count;
 extern size_t file_list_capacity;
 
-/* Вспомогательная структура для хранения записи и её MD5-хеша */
+// Вспомогательная структура для хранения файла и его MD5-хеша
 typedef struct {
     file_entry entry;
     char *hash;
 } file_hash;
 
-/* Функция для вычисления MD5-хеша файла.
-   Возвращает выделенную строку с 32-символьным хешем (в шестнадцатеричном представлении);
-   в случае ошибки возвращается NULL. */
+// Вычисление MD5-хеша файла
 static char *compute_md5(const char *filename) {
     FILE *fp = fopen(filename, "rb");
     if (!fp) {
-        perror("не удалось открыть файл для чтения");
+        perror("Ошибка открытия файла");
         return NULL;
     }
 
     MD5_CTX ctx;
     if (MD5_Init(&ctx) != 1) {
         fclose(fp);
-        fprintf(stderr, "ошибка инициализации MD5\n");
+        fprintf(stderr, "Ошибка инициализации MD5\n");
         return NULL;
     }
 
@@ -44,7 +42,7 @@ static char *compute_md5(const char *filename) {
     while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
         if (MD5_Update(&ctx, buffer, bytes) != 1) {
             fclose(fp);
-            fprintf(stderr, "ошибка вычисления MD5\n");
+            fprintf(stderr, "Ошибка вычисления MD5\n");
             return NULL;
         }
     }
@@ -52,13 +50,13 @@ static char *compute_md5(const char *filename) {
 
     unsigned char digest[MD5_DIGEST_LENGTH];
     if (MD5_Final(digest, &ctx) != 1) {
-        fprintf(stderr, "ошибка завершения вычисления MD5\n");
+        fprintf(stderr, "Ошибка завершения вычисления MD5\n");
         return NULL;
     }
 
     char *md5_str = malloc(MD5_DIGEST_LENGTH * 2 + 1);
     if (!md5_str) {
-        perror("ошибка выделения памяти для MD5 строки");
+        perror("Ошибка выделения памяти для MD5");
         return NULL;
     }
     for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
@@ -68,44 +66,36 @@ static char *compute_md5(const char *filename) {
     return md5_str;
 }
 
-/* Функция сравнения для qsort, сравнивает MD5-хеши двух файлов */
+// Сравнение MD5-хешей двух файлов
 static int compare_file_hash(const void *a, const void *b) {
-    const file_hash *fa = (const file_hash *)a;
-    const file_hash *fb = (const file_hash *)b;
-    return strcmp(fa->hash, fb->hash);
+    return strcmp(((const file_hash *)a)->hash, ((const file_hash *)b)->hash);
 }
 
-/* Функция filter_hash_list:
-   На основе глобального массива file_list вычисляет MD5 для каждого файла,
-   сортирует записи по хешу и группирует файлы с одинаковым MD5.
-   Если для определённого хеша найден только один файл, он не включается в итоговый список.
-   После фильтрации старый список освобождается, а file_list обновляется новым списком. */
+// Фильтрация списка файлов по MD5-хешу
 void filter_hash_list(void) {
     if (file_count == 0)
         return;
 
     file_hash *hash_array = malloc(file_count * sizeof(file_hash));
     if (!hash_array) {
-        perror("ошибка выделения памяти для hash_array");
+        perror("Ошибка выделения памяти для hash_array");
         exit(EXIT_FAILURE);
     }
 
-    /* Вычисляем MD5-хеш для каждого файла */
+    // Вычисление MD5-хешей для всех файлов
     for (size_t i = 0; i < file_count; i++) {
         hash_array[i].entry = file_list[i];
         hash_array[i].hash = compute_md5(file_list[i].full_path);
         if (!hash_array[i].hash) {
-            /* Если не удалось вычислить, устанавливаем пустую строку (такой файл, скорее всего, исключится) */
             hash_array[i].hash = strdup("");
         }
     }
 
-    /* Сортируем массив по MD5-хешу */
+    // Сортировка файлов по MD5
     qsort(hash_array, file_count, sizeof(file_hash), compare_file_hash);
 
     file_entry *filtered_list = NULL;
-    size_t filtered_count = 0;
-    size_t filtered_capacity = 0;
+    size_t filtered_count = 0, filtered_capacity = 0;
     int unique_flag = 0;
     verbose_log("Уникальные файлы:");
 
@@ -115,14 +105,14 @@ void filter_hash_list(void) {
         while (j < file_count && strcmp(hash_array[j].hash, hash_array[i].hash) == 0)
             j++;
 
-        /* Если группа с одинаковым MD5 больше одного файла, добавляем их в итоговый список */
+        // Если MD5 совпадает у нескольких файлов, добавляем их в список
         if ((j - i) > 1) {
             for (size_t k = i; k < j; k++) {
                 if (filtered_count >= filtered_capacity) {
                     filtered_capacity = filtered_capacity ? filtered_capacity * 2 : 10;
                     filtered_list = realloc(filtered_list, filtered_capacity * sizeof(file_entry));
                     if (!filtered_list) {
-                        perror("ошибка выделения памяти для filtered_list");
+                        perror("Ошибка выделения памяти для filtered_list");
                         exit(EXIT_FAILURE);
                     }
                 }
@@ -134,15 +124,15 @@ void filter_hash_list(void) {
         }
         i = j;
     }
-    if (!unique_flag) verbose_log("не найдены");
+    if (!unique_flag) verbose_log("Не найдены");
 
-    /* Освобождаем все вычисленные MD5-хеш строки и временный массив */
+    // Очистка временных данных
     for (size_t i = 0; i < file_count; i++) {
         free(hash_array[i].hash);
     }
     free(hash_array);
-
     free(file_list);
+
     file_list = filtered_list;
     file_count = filtered_count;
     file_list_capacity = filtered_capacity;

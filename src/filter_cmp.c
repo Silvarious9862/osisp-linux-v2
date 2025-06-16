@@ -4,74 +4,67 @@
 #include <limits.h>
 #include "verbose.h"
 
-/* Определение структуры для хранения информации о файле */
+// Структура для хранения информации о файле
 typedef struct {
     char full_path[PATH_MAX];
     off_t file_size;
 } file_entry;
 
-/* Глобальные переменные */
+// Глобальные переменные
 extern file_entry *file_list;
 extern size_t file_count;
 extern size_t file_list_capacity;
 
-/* Функция для поблочного сравнения двух файлов с использованием memcmp().
-   Открывает файлы, читает их блоками и сравнивает посредством memcmp().
-   Возвращает 1, если файлы идентичны, и 0 в противном случае. */
+// Поблочное сравнение двух файлов
 static int files_are_identical(const char *path1, const char *path2) {
     FILE *fp1 = fopen(path1, "rb");
     if (!fp1) {
-        perror("ошибка открытия первого файла");
+        perror("Ошибка открытия первого файла");
         return 0;
     }
     FILE *fp2 = fopen(path2, "rb");
     if (!fp2) {
-        perror("ошибка открытия второго файла");
+        perror("Ошибка открытия второго файла");
         fclose(fp1);
         return 0;
     }
     
-    char buf1[4096];
-    char buf2[4096];
+    char buf1[4096], buf2[4096];
     size_t n1, n2;
     int identical = 1;
+
     while (1) {
         n1 = fread(buf1, 1, sizeof(buf1), fp1);
         n2 = fread(buf2, 1, sizeof(buf2), fp2);
-        if(n1 != n2) {
+        if (n1 != n2) {
             identical = 0;
             break;
         }
-        if(n1 == 0) { // конец файлов
+        if (n1 == 0) // конец файлов
             break;
-        }
-        if(memcmp(buf1, buf2, n1) != 0) {
+        if (memcmp(buf1, buf2, n1) != 0) {
             identical = 0;
             break;
         }
     }
+
     fclose(fp1);
     fclose(fp2);
     return identical;
 }
 
-/* Функция filter_cmp_list:
-   Проводит попарное сравнение файлов из глобального списка.
-   Для каждой пары файлов с одинаковым размером, если файлы идентичны побайтно, оба файла маркируются как корректные.
-   В дальнейшем, в новый список попадают только файлы, которые имеют хотя бы одного идентичного партнёра.
-   Итоговый список сохраняется в глобальной переменной file_list, а file_count обновляется. */
+// Фильтрация списка файлов, оставляя только дубликаты
 void filter_cmp_list(void) {
     if (file_count == 0)
         return;
 
-    /* Создаём временный массив-флаг для отметки файлов, которые имеют дубль */
-    int *keep_flags = calloc(file_count, sizeof(int));
+    int *keep_flags = calloc(file_count, sizeof(int)); // Флаг наличия дубликата
     if (!keep_flags) {
-        perror("ошибка выделения памяти для keep_flags");
+        perror("Ошибка выделения памяти для keep_flags");
         exit(EXIT_FAILURE);
     }
 
-    /* Сравниваем каждый файл с последующими */
+    // Сравнение файлов попарно
     for (size_t i = 0; i < file_count; i++) {
         for (size_t j = i + 1; j < file_count; j++) {
             if (file_list[i].file_size == file_list[j].file_size) {
@@ -83,10 +76,9 @@ void filter_cmp_list(void) {
         }
     }
 
-    /* Собираем новый список, оставляя только файлы с совпадениями */
+    // Формирование нового списка с найденными дубликатами
     file_entry *filtered_list = NULL;
-    size_t filtered_count = 0;
-    size_t filtered_capacity = 0;
+    size_t filtered_count = 0, filtered_capacity = 0;
     int unique_flag = 0;
     verbose_log("Уникальные файлы:");
 
@@ -96,7 +88,7 @@ void filter_cmp_list(void) {
                 filtered_capacity = filtered_capacity ? filtered_capacity * 2 : 10;
                 filtered_list = realloc(filtered_list, filtered_capacity * sizeof(file_entry));
                 if (!filtered_list) {
-                    perror("ошибка выделения памяти для filtered_list");
+                    perror("Ошибка выделения памяти для filtered_list");
                     free(keep_flags);
                     exit(EXIT_FAILURE);
                 }
@@ -107,7 +99,8 @@ void filter_cmp_list(void) {
             unique_flag = 1;
         }
     }
-    if (!unique_flag) verbose_log("не найдены");
+
+    if (!unique_flag) verbose_log("Не найдены");
 
     free(keep_flags);
     free(file_list);
