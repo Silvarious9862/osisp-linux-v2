@@ -3,7 +3,7 @@ BUILD ?= debug
 # Каталоги
 SRC_DIR := ./src
 INC_DIR := ./include
-OUT_DIR := ./out/$(BUILD)
+OUT_DIR := ./build/$(BUILD)
 
 # Имя бинарного файла для новой потоковой версии
 TARGET := $(OUT_DIR)/threads
@@ -40,4 +40,4 @@ release:
 	$(MAKE) BUILD=release all
 
 clean:
-	rm -rf ./out
+	rm -rf $(OUT_DIR)
