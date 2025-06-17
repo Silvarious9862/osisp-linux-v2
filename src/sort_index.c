@@ -9,21 +9,20 @@
 #include <sys/stat.h>
 #include <signal.h>
 
-#include "scan.h"    // Доработанный модуль отображения файла с новой сигнатурой scan_file_segment()
-#include "sort.h"    // Модуль сортировки блоков
-#include "merge.h"   // Модуль слияния блоков
-#include "write.h"   // Модуль записи результата в файл
-#include "finish.h"  // Модуль очистки синхронизационных объектов
+#include "scan.h"    // Отображение файла 
+#include "sort.h"    // Сортировка блоков
+#include "merge.h"   // Слияние блоков
+#include "write.h"   // Запись результата в файл
+#include "finish.h"  // Очистка объектов синхронизации
 
 volatile int terminate_flag = 0;
 scan_data *current_seg = NULL;
-/* Обработчик SIGINT (без SA_RESTART) - только устанавливает флаг */
+
+// Обработчик SIGINT - устанавливает флаг завершения
 static void sigint_handler(int sig) {
-    (void)sig;  // подавляем предупреждение
+    (void)sig;
     printf("\nПолучен SIGINT. Запускается завершение работы...\n");
     terminate_flag = 1;
-    /* Не делаем освобождение здесь, так как free() не является async-signal-safe.
-       Освобождение будет выполнено в основном цикле, когда поток обнаружит установленный флаг. */
 }
 
 int main(int argc, char *argv[]) {
@@ -32,17 +31,17 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    /* Регистрация обработчика SIGINT */
+    // Регистрация обработчика SIGINT
     struct sigaction sa;
     sa.sa_handler = sigint_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;  // не используем SA_RESTART — блокирующие вызовы прерываются
+    sa.sa_flags = 0;
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         perror("Ошибка регистрации SIGINT");
         exit(EXIT_FAILURE);
     }
 
-    /* Чтение параметров запуска */
+    // Чтение параметров запуска
     long user_memsize = strtoul(argv[1], NULL, 10);
     int granul = atoi(argv[2]);
     int threads_count = atoi(argv[3]);
@@ -58,7 +57,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    /* Получаем размер файла */
+    // Получаем размер файла
     struct stat st;
     if (stat(filename, &st) != 0) {
         perror("stat");
@@ -70,16 +69,13 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    /* Получаем размер страницы для выравнивания mmap */
+    // Определение размера страницы
     long page_size = sysconf(_SC_PAGESIZE);
     if (page_size <= 0) {
         perror("sysconf");
         return EXIT_FAILURE;
     }
 
-    /* logical_offset – смещение в файле (логическое, без выравнивания),
-       которое будет обновляться по мере обработки сегментов.
-       Для первого сегмента оно равно 0. */
     off_t logical_offset = 0;
 
     while (logical_offset < filesize) {
@@ -91,37 +87,34 @@ int main(int argc, char *argv[]) {
         else
             effective_length = user_memsize;
         if (remaining < effective_length)
-            effective_length = remaining;  // для последнего сегмента
+            effective_length = remaining;
 
-        /* Вычисляем выравнённое смещение и adjustment */
         off_t aligned_offset = (logical_offset / page_size) * page_size;
         off_t adjustment = logical_offset - aligned_offset;
-
-        /* Длина отображаемой области для mmap = adjustment + effective_length */
         size_t map_length = adjustment + effective_length;
         if ((size_t)(filesize - aligned_offset) < map_length)
             map_length = filesize - aligned_offset;
 
-        /* Минимальный размер логического сегмента: для первого – header + 1 запись, для остальных – 1 запись */
+        // Минимальный размер логического сегмента
         size_t min_effective = is_first ? (sizeof(uint64_t) + sizeof(struct index_s)) : sizeof(struct index_s);
         if (effective_length < min_effective)
             break;
 
-        /* Вызов функции отображения. Передаём выровненное смещение */
+        // Вызов функции отображения
         scan_data *seg_data = scan_file_segment(filename, map_length, aligned_offset, adjustment, is_first, num_blocks);
         if (!seg_data) {
             fprintf(stderr, "Error: cannot map file segment at offset %ld.\n", (long)aligned_offset);
             return EXIT_FAILURE;
         }
 
-        /* Вычисляем число записей в сегменте на основе логического effective_length */
+        // Вычисляем число записей в сегменте
         size_t records_in_seg;
         if (is_first)
             records_in_seg = (effective_length - sizeof(uint64_t)) / sizeof(struct index_s);
         else
             records_in_seg = effective_length / sizeof(struct index_s);
 
-        /* Округляем число записей вниз до ближайшего числа, кратного num_blocks */
+        // Округляем число записей вниз до ближайшего числа, кратного num_blocks
         records_in_seg = (records_in_seg / num_blocks) * num_blocks;
         if (records_in_seg == 0) {
             free_scan_data(seg_data);
@@ -129,18 +122,18 @@ int main(int argc, char *argv[]) {
         }
         size_t block_size = records_in_seg / num_blocks;
 
-        /* --- Этап сортировки сегмента --- */
-        /* Для сортировки данные начинаются по адресу:
-           seg_data->map_ptr + adjustment + (если is_first то sizeof(uint64_t) иначе 0) */
+        // Этап сортировки сегмента
         char *data_ptr = (char *)seg_data->map_ptr + adjustment;
         if (is_first)
             data_ptr += sizeof(uint64_t);
 
+        // Сортировка
         sort_data sd;
         if (sort_init(&sd, (struct index_s *)data_ptr, records_in_seg, block_size, num_blocks, threads_count) != 0) {
             free_scan_data(seg_data);
             return EXIT_FAILURE;
         }
+
         pthread_t *sort_threads = malloc(threads_count * sizeof(pthread_t));
         sort_thread_arg *sort_targs = malloc(threads_count * sizeof(sort_thread_arg));
         if (!sort_threads || !sort_targs) {
@@ -165,12 +158,13 @@ int main(int argc, char *argv[]) {
         free(sort_threads);
         free(sort_targs);
 
-        /* --- Этап слияния сегмента --- */
+        // Слияние
         merge_data md;
         if (merge_init(&md, (struct index_s *)data_ptr, block_size, num_blocks, threads_count) != 0) {
             free_scan_data(seg_data);
             return EXIT_FAILURE;
         }
+
         pthread_t *merge_threads = malloc(threads_count * sizeof(pthread_t));
         merge_thread_arg *merge_targs = malloc(threads_count * sizeof(merge_thread_arg));
         if (!merge_threads || !merge_targs) {
@@ -196,27 +190,23 @@ int main(int argc, char *argv[]) {
         free(merge_threads);
         free(merge_targs);
 
-        /* --- Этап записи отсортированного сегмента --- */
+        // Запись
         if (write_sorted_result(seg_data) != 0) {
             free_scan_data(seg_data);
             return EXIT_FAILURE;
         }
 
-        /* Очистка объектов, созданных для данного сегмента */
+        // Очистка объектов, созданных для данного сегмента
         finish_cleanup_merge(&md);
         finish_cleanup_sort(&sd);
         free_scan_data(seg_data);
 
-        /* Обновляем logical_offset:
-           для первого сегмента – на (user_memsize + header),
-           для остальных – на user_memsize */
+        // Обновляем logical_offset:
         if (is_first)
             logical_offset += (user_memsize + sizeof(uint64_t));
         else
             logical_offset += user_memsize;
     }
 
-    /* Очистка глобального объекта, если используется (например, prep_barrier) */
-//    finish_cleanup_prep();
     return EXIT_SUCCESS;
 }

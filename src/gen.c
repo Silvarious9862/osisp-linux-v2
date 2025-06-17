@@ -4,10 +4,10 @@
 #include <time.h>
 #include <errno.h>
 
-// Структура одной индексной записи
+// Структура индексной записи
 struct index_s {
     double time_mark; // временная метка (модифицированная юлианская дата)
-    uint64_t recno;   // номер записи в таблице БД
+    uint64_t recno;   // номер записи в БД
 };
 
 int main(int argc, char *argv[]) {
@@ -30,31 +30,29 @@ int main(int argc, char *argv[]) {
 
     FILE *fp = fopen(argv[2], "wb");
     if (!fp) {
-        perror("fopen");
+        perror("Ошибка открытия файла");
         return EXIT_FAILURE;
     }
 
-    // Записываем заголовок: количество записей (uint64_t)
+    // Записываем заголовок: количество записей
     if (fwrite(&num_records, sizeof(num_records), 1, fp) != 1) {
-        perror("fwrite header");
+        perror("Ошибка записи заголовка");
         fclose(fp);
         return EXIT_FAILURE;
     }
 
-    // Выделяем память для массива индексных записей
+    // Выделяем память для записей
     struct index_s *records_array = malloc(num_records * sizeof(struct index_s));
     if (!records_array) {
-        perror("malloc");
+        perror("Ошибка выделения памяти");
         fclose(fp);
         return EXIT_FAILURE;
     }
 
-    // Инициализация генератора случайных чисел
+    // Генератор случайных чисел
     srandom((unsigned int) time(NULL));
 
-    // Вычисляем максимальное значение для целой части временной метки.
-    // Модифицированная юлианская дата для 1970-01-01 равна 40587.
-    // Вычисляем MJD для "вчера": MJD = floor((time(NULL)-86400)/86400) + 40587.
+    // Вычисляем допустимые границы для временной метки
     time_t now = time(NULL);
     time_t yesterday = now - 86400;
     unsigned long days_since_epoch = yesterday / 86400;
@@ -68,19 +66,18 @@ int main(int argc, char *argv[]) {
     }
     unsigned long range = max_int - min_int + 1;
 
-    // Генерируем каждую индексную запись
+    // Генерация записей
     for (uint64_t i = 0; i < num_records; i++) {
         unsigned long int_part = (unsigned long)(random() % range) + min_int;
-        // Генерируем дробную часть, приводя результат к диапазону [0, 1)
         double frac = (double) random() / ((double) RAND_MAX + 1.0);
         records_array[i].time_mark = (double) int_part + frac;
         records_array[i].recno = i + 1;
     }
 
-    // Записываем массив индексных записей в файл
+    // Запись записей в файл
     size_t written = fwrite(records_array, sizeof(struct index_s), num_records, fp);
     if (written != num_records) {
-        fprintf(stderr, "Error writing records: wrote %zu of %llu records\n",
+        fprintf(stderr, "Ошибка записи: записано %zu из %llu\n",
                 written, (unsigned long long)num_records);
         free(records_array);
         fclose(fp);

@@ -8,35 +8,28 @@
 #include <string.h>
 #include <stdint.h>
 
-/* Предполагается, что глобальный флаг terminate_flag объявлен в общем модуле */
+// Глобальный флаг завершения работы
 extern volatile int terminate_flag;
 
-/**
- * scan_file_segment() – отображает в память часть файла с учетом выравнивания.
- *
- * Сначала открывается файл с именем filename, затем вызывается mmap() для отображения
- * области размера map_length, начиная с map_offset. Если is_first == 1, то ожидается, что
- * по адресу (char *)map_ptr + adjustment находится 8-байтовый заголовок, а данные (index_s)
- * начинаются сразу после заголовка.
- */
+// Отображение части файла с учетом выравнивания
 scan_data *scan_file_segment(const char *filename, size_t map_length, off_t map_offset, off_t adjustment, int is_first, int num_blocks) {
     scan_data *data = malloc(sizeof(scan_data));
     if (!data) {
-        perror("malloc scan_data");
+        perror("Ошибка выделения памяти для scan_data");
         return NULL;
     }
     data->memsize = map_length;
 
-    /* Если флаг завершения уже установлен, освобождаем и выходим */
+    // Проверка флага завершения
     if (terminate_flag) {
         free(data);
         return NULL;
     }
 
-    /* Открываем файл для чтения/записи */
+    // Открываем файл для чтения/записи
     data->fd = open(filename, O_RDWR);
     if (data->fd < 0) {
-        fprintf(stderr, "Error opening file %s: %s\n", filename, strerror(errno));
+        fprintf(stderr, "Ошибка открытия файла %s: %s\n", filename, strerror(errno));
         free(data);
         return NULL;
     }
@@ -47,36 +40,36 @@ scan_data *scan_file_segment(const char *filename, size_t map_length, off_t map_
         return NULL;
     }
 
-    /* Отображаем область файла начиная с map_offset */
+    // Отображение файла в память
     data->map_ptr = mmap(NULL, map_length, PROT_READ | PROT_WRITE, MAP_SHARED, data->fd, map_offset);
     if (data->map_ptr == MAP_FAILED) {
-        fprintf(stderr, "Error mapping file segment at offset %ld: %s\n", (long)map_offset, strerror(errno));
+        fprintf(stderr, "Ошибка отображения файла на offset %ld: %s\n", (long)map_offset, strerror(errno));
         close(data->fd);
         free(data);
         return NULL;
     }
-    
+
+    // Проверка флага завершения после mmap()
     if (terminate_flag) {
-        /* Если мы получили сигнал завершения сразу после mmap(), освобождаем ресурсы */
         munmap(data->map_ptr, map_length);
         close(data->fd);
         free(data);
         return NULL;
     }
 
+    // Извлечение заголовка для первого сегмента
     if (is_first) {
-        /* Извлекаем заголовок (общее число записей) по адресу: map_ptr + adjustment */
         data->total_records = *((uint64_t *)((char *)data->map_ptr + adjustment));
-        /* Данные начинаются после заголовка */
         data->records = (struct index_s *)((char *)data->map_ptr + adjustment + sizeof(uint64_t));
     } else {
-        data->total_records = 0; /* Для остальных сегментов заголовок не используется */
+        data->total_records = 0;
         data->records = (struct index_s *)((char *)data->map_ptr + adjustment);
     }
 
     return data;
 }
 
+// Освобождение ресурсов отображения
 void free_scan_data(scan_data *data) {
     if (data) {
         if (data->map_ptr && data->map_ptr != MAP_FAILED) {
