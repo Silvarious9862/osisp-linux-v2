@@ -19,6 +19,8 @@ typedef struct {
     size_t capacity;
 } FileList;
 
+static void free_file_list(FileList *list);
+
 // Глобальный список файлов для очистки при SIGINT
 static FileList *g_file_list = NULL;
 
