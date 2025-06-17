@@ -1,4 +1,3 @@
-// producer.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,14 +6,14 @@
 #include <pthread.h>
 #include "common.h"
 #include "thread_queue.h"
-#include "producer_consumer.h"  // Если в нём содержатся дополнительные прототипы
+#include "producer_consumer.h"
 
 extern volatile int terminate_flag;   // Глобальный флаг завершения (определён в main.c)
-extern ThreadMessageQueue queue;        // Глобальная очередь
-extern pthread_mutex_t resize_mutex;      // Глобальный mutex для защиты при изменении размера
+extern ThreadMessageQueue queue;      // Глобальная очередь
+extern pthread_mutex_t resize_mutex;  // Мьютекс для защиты при изменении размера
 extern volatile int pause_processing;
 
-// Функция вычисления контрольной суммы; можно её вынести в общий модуль, если используется и в consumer.c.
+// Функция вычисления контрольной суммы
 unsigned short calculate_hash(Message *message) {
     unsigned short hash = 0;
     int len = (message->size == 0 ? 256 : message->size);
@@ -23,6 +22,7 @@ unsigned short calculate_hash(Message *message) {
     return hash;
 }
 
+// Потоковая функция производителя
 void *producer_thread(void *arg) {
     int id = *(int*)arg;
     free(arg);
@@ -30,24 +30,26 @@ void *producer_thread(void *arg) {
     while (!terminate_flag) {
         Message message;
         message.type = 'A' + (rand() % 26);
+
+        // Определение размера сообщения
         int r = rand() % 257;
         while (r == 0)
             r = rand() % 257;
         int actual_len = (r == 256) ? 256 : r;
         message.size = (r == 256) ? 0 : r;
 
+        // Выровненный размер данных
         int padded_len = ((actual_len + 3) / 4) * 4;
         if (padded_len > (int)sizeof(message.data))
             padded_len = sizeof(message.data);
+
+        // Заполнение данных
         for (int i = 0; i < padded_len; i++) {
-            if (i < actual_len)
-                message.data[i] = 'A' + (rand() % 26);
-            else
-                message.data[i] = 0;
+            message.data[i] = (i < actual_len) ? ('A' + (rand() % 26)) : 0;
         }
         message.hash = calculate_hash(&message);
 
-        // Производитель ждет, если обработка приостановлена
+        // Ожидание, если обработка приостановлена
         while (pause_processing) {
             pthread_yield();
         }
@@ -56,6 +58,7 @@ void *producer_thread(void *arg) {
         pthread_mutex_lock(&resize_mutex);
         pthread_mutex_unlock(&resize_mutex);
 
+        // Ожидание свободного места в очереди
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_sec += 1;
@@ -67,6 +70,7 @@ void *producer_thread(void *arg) {
             }
         }
 
+        // Добавление сообщения в очередь
         pthread_mutex_lock(&queue.mutex);
             queue.buffer[queue.tail] = message;
             queue.tail = (queue.tail + 1) % queue.capacity;

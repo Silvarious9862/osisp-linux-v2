@@ -5,27 +5,27 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-// Динамическая очередь сообщений для мультипоточности
+// Структура динамической очереди сообщений
 typedef struct {
-    Message *buffer;           // динамический массив сообщений
-    int capacity;              // текущая ёмкость очереди
-    int head;                  // индекс извлечения
-    int tail;                  // индекс добавления
-    int count;                 // число сообщений в очереди
-    int added_count;           // общий счётчик добавленных сообщений
-    int removed_count;         // общий счётчик извлечённых сообщений
-    pthread_mutex_t mutex;     // мьютекс для защиты очереди
-    sem_t sem_free;            // семафор для свободных слотов
-    sem_t sem_full;            // семафор для заполненных слотов
+    Message *buffer;           // Динамический массив сообщений
+    int capacity;              // Текущая ёмкость очереди
+    int head;                  // Индекс извлечения
+    int tail;                  // Индекс добавления
+    int count;                 // Число сообщений в очереди
+    int added_count;           // Общий счётчик добавленных сообщений
+    int removed_count;         // Общий счётчик извлечённых сообщений
+    pthread_mutex_t mutex;     // Мьютекс для защиты очереди
+    sem_t sem_free;            // Семафор для свободных слотов
+    sem_t sem_full;            // Семафор для заполненных слотов
 } ThreadMessageQueue;
 
-// Инициализация очереди; возвращает 0 при успехе, -1 при отказе.
+// Инициализация очереди (возвращает 0 при успехе, -1 при отказе)
 int init_thread_queue(ThreadMessageQueue *q, int capacity);
 
-// Освобождение очереди и освобождение ресурсов.
+// Освобождение ресурсов очереди
 void destroy_thread_queue(ThreadMessageQueue *q);
 
-// Изменение ёмкости очереди (new_capacity не может быть меньше числа элементов).
+// Изменение ёмкости очереди (new_capacity не может быть меньше числа элементов)
 int resize_thread_queue(ThreadMessageQueue *q, int new_capacity);
 
 #endif // THREAD_QUEUE_H

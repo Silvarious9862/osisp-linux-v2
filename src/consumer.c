@@ -1,4 +1,3 @@
-// consumer.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -13,9 +12,10 @@ extern volatile int terminate_flag;
 extern ThreadMessageQueue queue;
 extern pthread_mutex_t resize_mutex;
 
-// Если calculate_hash уже вынесен в producer.c, можно вынести его общий прототип в producer_consumer.h.
+// Прототип функции вычисления контрольной суммы
 unsigned short calculate_hash(Message *message);
 
+// Потоковая функция потребителя
 void *consumer_thread(void *arg) {
     int id = *(int*)arg;
     free(arg);
@@ -23,6 +23,7 @@ void *consumer_thread(void *arg) {
         pthread_mutex_lock(&resize_mutex);
         pthread_mutex_unlock(&resize_mutex);
         
+        // Ожидание доступного сообщения
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_sec += 1;
@@ -34,6 +35,7 @@ void *consumer_thread(void *arg) {
             }
         }
         
+        // Извлечение сообщения из очереди
         pthread_mutex_lock(&queue.mutex);
             Message message = queue.buffer[queue.head];
             queue.head = (queue.head + 1) % queue.capacity;
@@ -44,6 +46,8 @@ void *consumer_thread(void *arg) {
 
         printf("Consumer[%d]: извлечено сообщение (тип '%c', размер %d, hash %u). Всего извлечено: %d\n",
                 id, message.type, (message.size == 0 ? 256 : message.size), message.hash, queue.removed_count);
+
+        // Проверка контрольной суммы
         if (calculate_hash(&message) == message.hash)
             printf("Consumer[%d]: сообщение корректно.\n", id);
         else
