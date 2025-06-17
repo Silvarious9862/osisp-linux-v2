@@ -11,39 +11,51 @@
 
 #define MAX_THREADS 100
 
+// Глобальные переменные
 volatile int terminate_flag = 0;
-static void sigint_handler(int sig);
 MessageQueue queue;
 
+// Обработчик SIGINT (Ctrl-C) для завершения работы
+static void sigint_handler(int sig) {
+    (void)sig; 
+    printf("\nПолучен SIGINT. Запускается завершение работы...\n");
+    terminate_flag = 1;
+    pthread_mutex_lock(&queue.mutex);
+    pthread_cond_broadcast(&queue.not_empty);
+    pthread_cond_broadcast(&queue.not_full);
+    pthread_mutex_unlock(&queue.mutex);
+}
+
 int main() {
-    // Регистрация обработчика SIGINT без SA_RESTART:
+    // Настройка обработчика SIGINT
     struct sigaction sa;
-    sa.sa_handler = sigint_handler;          // объявим обработчик ниже
+    sa.sa_handler = sigint_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0; // не используем SA_RESTART
+    sa.sa_flags = 0;
     if (sigaction(SIGINT, &sa, NULL) == -1) {
          perror("Ошибка sigaction");
          exit(1);
     }
-    
+
+    // Инициализация очереди
     srand(time(NULL));
     if (init_queue(&queue, INITIAL_CAPACITY) != 0) {
         perror("Ошибка инициализации очереди");
         return 1;
     }
-    
+
     pthread_t producers[MAX_THREADS], consumers[MAX_THREADS];
     int prod_count = 0, cons_count = 0;
     char command[10];
-    
-    printf("Команды:\n");
-    printf("  + : добавить поток-производитель\n");
-    printf("  - : добавить поток-потребитель\n");
-    printf("  > : увеличить размер очереди\n");
-    printf("  < : уменьшить размер очереди (только когда очередь пуста)\n");
-    printf("  p : вывести состояние очереди\n");
-    printf("  q : завершение работы\n");
-    
+
+    printf("Команды:\n"
+           "  + : добавить поток-производитель\n"
+           "  - : добавить поток-потребитель\n"
+           "  > : увеличить размер очереди\n"
+           "  < : уменьшить размер очереди (только если очередь пуста)\n"
+           "  p : вывести состояние очереди\n"
+           "  q : завершение работы\n");
+
     while (fgets(command, sizeof(command), stdin) != NULL) {
         if (command[0] == 'q') {
             terminate_flag = 1;
@@ -55,22 +67,18 @@ int main() {
         } else if (command[0] == '+') {
             int *id = malloc(sizeof(int));
             if (!id) continue;
-            *id = prod_count + 1;
-            if (pthread_create(&producers[prod_count], NULL, producer_thread, id) != 0) {
+            *id = ++prod_count;
+            if (pthread_create(&producers[prod_count - 1], NULL, producer_thread, id) != 0) {
                 perror("Ошибка создания производителя");
                 free(id);
-            } else {
-                prod_count++;
             }
         } else if (command[0] == '-') {
             int *id = malloc(sizeof(int));
             if (!id) continue;
-            *id = cons_count + 1;
-            if (pthread_create(&consumers[cons_count], NULL, consumer_thread, id) != 0) {
+            *id = ++cons_count;
+            if (pthread_create(&consumers[cons_count - 1], NULL, consumer_thread, id) != 0) {
                 perror("Ошибка создания потребителя");
                 free(id);
-            } else {
-                cons_count++;
             }
         } else if (command[0] == 'p') {
             print_status(&queue);
@@ -105,7 +113,7 @@ int main() {
             printf("Неизвестная команда: %s", command);
         }
     }
-    
+
     // Рассылаем сигнал всем ожидающим потокам для завершения работы
     pthread_mutex_lock(&queue.mutex);
     pthread_cond_broadcast(&queue.not_empty);
@@ -118,19 +126,8 @@ int main() {
     for (int i = 0; i < cons_count; i++) {
         pthread_join(consumers[i], NULL);
     }
-    
+
     destroy_queue(&queue);
     printf("Программа завершена.\n");
     return 0;
-}
-
-// Определение обработчика SIGINT
-static void sigint_handler(int sig) {
-    (void)sig;  // подавляем предупреждение
-    printf("\nПолучен SIGINT. Запускается завершение работы...\n");
-    terminate_flag = 1;
-    pthread_mutex_lock(&queue.mutex);
-    pthread_cond_broadcast(&queue.not_empty);
-    pthread_cond_broadcast(&queue.not_full);
-    pthread_mutex_unlock(&queue.mutex);
 }

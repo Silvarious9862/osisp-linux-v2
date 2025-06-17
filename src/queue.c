@@ -4,6 +4,7 @@
 
 extern volatile int terminate_flag;
 
+// Инициализация очереди
 int init_queue(MessageQueue *q, int capacity) {
     q->buffer = malloc(capacity * sizeof(Message));
     if (!q->buffer) return -1;
@@ -19,6 +20,7 @@ int init_queue(MessageQueue *q, int capacity) {
     return 0;
 }
 
+// Освобождение ресурсов очереди
 void destroy_queue(MessageQueue *q) {
     free(q->buffer);
     pthread_mutex_destroy(&q->mutex);
@@ -26,10 +28,9 @@ void destroy_queue(MessageQueue *q) {
     pthread_cond_destroy(&q->not_full);
 }
 
+// Добавление сообщения в очередь
 void push_message(MessageQueue *q, Message *m) {
     pthread_mutex_lock(&q->mutex);
-    /* Ожидаем, пока очередь заполнена и система не завершает работу.
-       Если terminate_flag установлен – выходим. */
     while (q->count == q->capacity && !terminate_flag) {
         pthread_cond_wait(&q->not_full, &q->mutex);
     }
@@ -45,9 +46,9 @@ void push_message(MessageQueue *q, Message *m) {
     pthread_mutex_unlock(&q->mutex);
 }
 
+// Извлечение сообщения из очереди
 void pop_message(MessageQueue *q, Message *m) {
     pthread_mutex_lock(&q->mutex);
-    /* Ожидаем появления элемента в очереди, если очередь пуста и система не завершает работу */
     while (q->count == 0 && !terminate_flag) {
         pthread_cond_wait(&q->not_empty, &q->mutex);
     }
@@ -63,6 +64,7 @@ void pop_message(MessageQueue *q, Message *m) {
     pthread_mutex_unlock(&q->mutex);
 }
 
+// Изменение размера очереди
 int resize_queue(MessageQueue *q, int new_capacity) {
     pthread_mutex_lock(&q->mutex);
     if (new_capacity < q->count) {
@@ -75,7 +77,6 @@ int resize_queue(MessageQueue *q, int new_capacity) {
         pthread_mutex_unlock(&q->mutex);
         return -1;
     }
-    /* Копируем элементы в порядке их логического расположения */
     for (int i = 0; i < q->count; i++) {
         new_buffer[i] = q->buffer[(q->head + i) % q->capacity];
     }
@@ -84,13 +85,13 @@ int resize_queue(MessageQueue *q, int new_capacity) {
     q->capacity = new_capacity;
     q->head = 0;
     q->tail = q->count;
-    /* Разбудим все ожидающие потоки */
     pthread_cond_broadcast(&q->not_full);
     pthread_cond_broadcast(&q->not_empty);
     pthread_mutex_unlock(&q->mutex);
     return 0;
 }
 
+// Вывод состояния очереди
 void print_status(MessageQueue *q) {
     pthread_mutex_lock(&q->mutex);
     printf("\n--- Состояние очереди ---\n");
