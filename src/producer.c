@@ -10,15 +10,19 @@
 #include "common.h"
 #include "ipc.h"
 
+// Глобальная переменная для обработки завершения процесса
 volatile sig_atomic_t terminate_flag = 0;
 
+// Обработчик сигнала SIGTERM
 void termination_handler(int sig) {
     terminate_flag = 1;
 }
 
 int main() {
+    // Регистрация обработчика SIGTERM
     signal(SIGTERM, termination_handler);
 
+    // Подключение к разделяемой памяти
     int shm_id = shmget(SHM_KEY, sizeof(MessageQueue), 0666);
     if (shm_id == -1) {
         perror("Ошибка подключения к общей памяти");
@@ -31,6 +35,7 @@ int main() {
         exit(1);
     }
 
+    // Подключение к семафорам
     int sem_id = semget(SEM_KEY, 3, 0666);
     if (sem_id == -1) {
         perror("Ошибка подключения к семафорам");
@@ -41,60 +46,37 @@ int main() {
     printf("Производитель %d запущен.\n", getpid());
 
     while (1) {
+        // Проверка флага завершения
         if (terminate_flag) {
             printf("Производитель %d завершает работу.\n", getpid());
             break;
         }
 
+        // Генерация нового сообщения
         Message message;
         message.type = 'A' + (rand() % 26);
-        
-        /* 
-         * Генерация размера сообщения:
-         * Используем rand() % 257. Если результат равен 0, генерируем заново.
-         * Если результат равен 256, то в поле size записываем 0 (это специальное значение,
-         * означающее, что реальная длина данных равна 256 байт).
-         */
+
+        // Определение размера сообщения с обработкой особого случая (256 байт)
         int r = rand() % 257;
         while (r == 0) {
             r = rand() % 257;
         }
         
-        int actual_len;  // реальная длина данных
-        if (r == 256) {
-            message.size = 0;  // особое значение, означающее 256 байт
-            actual_len = 256;
-        } else {
-            message.size = r;
-            actual_len = r;
-        }
-        
-        /*
-         * Вычисляем выровненную длину поля data:
-         * Поскольку данные должны иметь длину, кратную 4м байтам, вычисляем:
-         * padded_len = ((actual_len + 3) / 4) * 4.
-         */
+        int actual_len = (r == 256) ? 256 : r;
+        message.size = (r == 256) ? 0 : r;
+
+        // Вычисление выровненного размера данных
         int padded_len = ((actual_len + 3) / 4) * 4;
-        
-        /* Генерируем данные:
-         * первые actual_len байт заполняем случайными буквами,
-         * оставшиеся байты (до padded_len) заполняем нулём.
-         */
+
+        // Заполнение данных случайными буквами с нулевыми дополнениями
         for (int i = 0; i < padded_len; i++) {
-            if (i < actual_len) {
-                message.data[i] = 'A' + (rand() % 26);
-            } else {
-                message.data[i] = 0;
-            }
+            message.data[i] = (i < actual_len) ? ('A' + (rand() % 26)) : 0;
         }
 
-        /* Вычисляем контрольную сумму.
-         * Функция calculate_hash в данном случае суммирует ровно
-         * actual_len байт (если message.size равен 0, считается 256).
-         */
+        // Вычисление контрольной суммы
         message.hash = calculate_hash(&message);
 
-        // Ожидание свободного места и захват мьютекса
+        // Ожидание доступного места и захват мьютекса
         semaphore_op(sem_id, 0, -1);
         semaphore_op(sem_id, 2, -1);
 
@@ -105,12 +87,8 @@ int main() {
         queue->added_count++;
 
         printf("Производитель %d: добавлено сообщение (тип '%c', ", getpid(), message.type);
-        if (message.size == 0) {
-            printf("размер %d, ", 256);
-        } else {
-            printf("размер %d, ", message.size);
-        }
-        printf("hash %u). Всего добавлено: %d\n", message.hash, queue->added_count);
+        printf("размер %d, hash %u). Всего добавлено: %d\n",
+               (message.size == 0) ? 256 : message.size, message.hash, queue->added_count);
 
         // Освобождение мьютекса и индикация заполненного слота
         semaphore_op(sem_id, 2, 1);

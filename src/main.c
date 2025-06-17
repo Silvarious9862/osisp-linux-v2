@@ -12,8 +12,8 @@
 #define MAX_PRODUCERS 100
 #define MAX_CONSUMERS 100
 
-volatile sig_atomic_t terminate_flag = 0; // Флаг завершения
-
+// Глобальные переменные для управления процессами и IPC-ресурсами
+volatile sig_atomic_t terminate_flag = 0;
 pid_t producer_pids[MAX_PRODUCERS];
 pid_t consumer_pids[MAX_CONSUMERS];
 int producer_count = 0;
@@ -23,7 +23,7 @@ MessageQueue* queue;
 int shm_id;
 int sem_id;
 
-// Вспомогательная функция для контроля дедлоков
+// Проверка возможных дедлоков в системе
 void check_deadlock() {
     if (producer_count == 0 && queue->free_slots == QUEUE_SIZE) {
         printf("---Нет активных производителей! Нужно добавить производителей.---\n");
@@ -42,7 +42,7 @@ void* deadlock_monitor(void* arg) {
     return NULL;
 }
 
-// Инициализация общей памяти и семафорного набора
+// Инициализация общей памяти и семафоров
 void init_resources() {
     shm_id = shmget(SHM_KEY, sizeof(MessageQueue), IPC_CREAT | 0666);
     if (shm_id == -1) {
@@ -62,14 +62,14 @@ void init_resources() {
         perror("Ошибка при создании семафоров");
         exit(1);
     }
-    // Инициализация семафоров:
-    // [0] — свободные слоты, [1] — заполненные слоты, [2] — мьютекс
+
+    // Инициализация семафоров: [0] — свободные слоты, [1] — занятые слоты, [2] — мьютекс
     semctl(sem_id, 0, SETVAL, QUEUE_SIZE);
     semctl(sem_id, 1, SETVAL, 0);
     semctl(sem_id, 2, SETVAL, 1);
 }
 
-// Очистка ресурсов и отправка сигнала завершения дочерним процессам
+// Очистка IPC-ресурсов и завершение дочерних процессов
 void cleanup_resources() {
     terminate_flag = 1;
     for (int i = 0; i < producer_count; i++) {
@@ -93,9 +93,9 @@ void print_status() {
     printf("Производителей: %d, Потребителей: %d\n", producer_count, consumer_count);
 }
 
-// Обработчик SIGINT для корректной очистки IPC-ресурсов
+// Обработчик SIGINT для корректной очистки ресурсов
 static void sigint_handler(int sig) {
-    (void)sig; // Игнорируем параметр
+    (void)sig;
     printf("\nПолучен SIGINT. Запускается очистка ресурсов...\n");
     cleanup_resources();
     printf("Ресурсы очищены. Завершается программа.\n");
@@ -149,19 +149,20 @@ void handle_commands() {
 }
 
 int main() {
-    // Регистрируем обработчик SIGINT (Ctrl-C)
+    // Регистрация обработчика SIGINT
     struct sigaction sa;
     sa.sa_handler = sigint_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     if (sigaction(SIGINT, &sa, NULL) == -1) {
-         perror("sigaction");
-         exit(1);
+        perror("sigaction");
+        exit(1);
     }
 
     printf("Запуск основного процесса.\n");
     init_resources();
 
+    // Запуск потока мониторинга дедлоков
     pthread_t monitor_thread;
     pthread_create(&monitor_thread, NULL, deadlock_monitor, NULL);
 

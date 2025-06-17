@@ -2,11 +2,13 @@
 #include <sys/sem.h>
 #include <unistd.h>
 
+// Операция над семафором: выполнение изменения состояния
 void semaphore_op(int sem_id, int sem_num, int op) {
     struct sembuf sem_op = {sem_num, op, 0};
     semop(sem_id, &sem_op, 1);
 }
 
+// Вычисление контрольной суммы для сообщения
 unsigned short calculate_hash(Message* message) {
     unsigned short hash = 0;
     int len = (message->size == 0 ? 256 : message->size);
@@ -16,6 +18,7 @@ unsigned short calculate_hash(Message* message) {
     return hash;
 }
 
+// Проверка корректности хеш-суммы сообщения
 int verify_hash(Message* message) {
     unsigned short expected_hash = 0;
     int len = (message->size == 0 ? 256 : message->size);

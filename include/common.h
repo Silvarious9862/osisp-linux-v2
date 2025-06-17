@@ -3,11 +3,11 @@
 
 #include <sys/ipc.h>
 
-#define QUEUE_SIZE 10
-#define SHM_KEY 0x1234
-#define SEM_KEY 0x5678
+#define QUEUE_SIZE 10  // Размер кольцевого буфера
+#define SHM_KEY 0x1234 // Ключ для разделяемой памяти
+#define SEM_KEY 0x5678 // Ключ для семафоров
 
-// Определение структуры сообщения
+// Структура сообщения в очереди
 typedef struct {
     char type;                 // Тип сообщения
     unsigned short hash;       // Контрольная сумма
@@ -15,13 +15,13 @@ typedef struct {
     char data[256];            // Данные сообщения
 } Message;
 
-// Определение структуры очереди на основе кольцевого буфера
+// Структура кольцевого буфера сообщений
 typedef struct {
-    Message buffer[QUEUE_SIZE]; // Кольцевой буфер
-    int head;                   // Индекс извлечения (голова)
-    int tail;                   // Индекс добавления (хвост)
-    int added_count;            // Количество добавленных сообщений
-    int removed_count;          // Количество извлечённых сообщений
+    Message buffer[QUEUE_SIZE]; // Буфер сообщений
+    int head;                   // Индекс извлечения
+    int tail;                   // Индекс добавления
+    int added_count;            // Общее количество добавленных сообщений
+    int removed_count;          // Общее количество извлечённых сообщений
     int free_slots;             // Количество свободных слотов в буфере
 } MessageQueue;
 
