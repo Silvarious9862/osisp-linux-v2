@@ -5,19 +5,21 @@
 #include <string.h>
 #include <sys/types.h>
 
-// Внешнее объявление глобальной переменной окружения
+// Глобальная переменная окружения
 extern char **environ;
 
+// Создание дочернего процесса в режиме '+'
 void spawn_child_plus(int child_number, const char *env_file) {
     pid_t pid = fork();
     if (pid == -1) {
         perror("Ошибка fork");
         exit(1);
     } else if (pid == 0) {
-        // Дочерний процесс для режима '+'
+        // Формируем имя дочернего процесса
         char child_name[20];
         snprintf(child_name, sizeof(child_name), "child_%02d", child_number);
 
+        // Получаем путь к исполняемому файлу дочернего процесса
         char *child_path = getenv("CHILD_PATH");
         if (!child_path) {
             fprintf(stderr, "Ошибка: переменная окружения CHILD_PATH не задана.\n");
@@ -27,7 +29,7 @@ void spawn_child_plus(int child_number, const char *env_file) {
         char child_exec[512];
         snprintf(child_exec, sizeof(child_exec), "%s/child", child_path);
 
-        // Передаем путь к файлу env как второй аргумент
+        // Передача пути к env-файлу в аргументах
         char *args[] = {child_name, (char *)env_file, NULL};
 
         execve(child_exec, args, environ);
@@ -38,16 +40,18 @@ void spawn_child_plus(int child_number, const char *env_file) {
     }
 }
 
+// Создание дочернего процесса в режиме '*'
 void spawn_child_star(int child_number) {
     pid_t pid = fork();
     if (pid == -1) {
         perror("Ошибка fork");
         exit(1);
     } else if (pid == 0) {
-        // Дочерний процесс для режима '*'
+        // Формируем имя дочернего процесса
         char child_name[20];
         snprintf(child_name, sizeof(child_name), "child_%02d", child_number);
 
+        // Получаем путь к исполняемому файлу дочернего процесса
         char *child_path = getenv("CHILD_PATH");
         if (!child_path) {
             fprintf(stderr, "Ошибка: переменная окружения CHILD_PATH не задана.\n");
@@ -57,7 +61,7 @@ void spawn_child_star(int child_number) {
         char child_exec[512];
         snprintf(child_exec, sizeof(child_exec), "%s/child", child_path);
 
-        // Формируем сокращенное окружение и добавляем переменную CHILD_MODE для идентификации режима '*'
+        // Определяем сокращенное окружение для дочернего процесса
         char *child_env[] = {
             "SHELL=/bin/bash",
             "HOME=/home/silvarious",
@@ -72,7 +76,7 @@ void spawn_child_star(int child_number) {
             NULL
         };
 
-        // Передаем NULL как второй аргумент — файл env не нужен в режиме '*'
+        // Передаем NULL в аргументах, так как env-файл не требуется
         char *args[] = {child_name, NULL};
 
         execve(child_exec, args, child_env);
@@ -83,16 +87,18 @@ void spawn_child_star(int child_number) {
     }
 }
 
+// Создание дочернего процесса в режиме '&'
 void spawn_child_amp(int child_number) {
     pid_t pid = fork();
     if (pid == -1) {
         perror("Ошибка fork");
         exit(1);
     } else if (pid == 0) {
-        // Дочерний процесс для режима '&'
+        // Формируем имя дочернего процесса
         char child_name[20];
         snprintf(child_name, sizeof(child_name), "child_%02d", child_number);
 
+        // Получаем путь к исполняемому файлу дочернего процесса
         char *child_path = getenv("CHILD_PATH");
         if (!child_path) {
             fprintf(stderr, "Ошибка: переменная окружения CHILD_PATH не задана.\n");
@@ -102,7 +108,7 @@ void spawn_child_amp(int child_number) {
         char child_exec[512];
         snprintf(child_exec, sizeof(child_exec), "%s/child", child_path);
 
-        // Передаём стандартное окружение без переменной CHILD_MODE
+        // Используем стандартное окружение без CHILD_MODE
         char *args[] = {child_name, NULL};
 
         execve(child_exec, args, environ);

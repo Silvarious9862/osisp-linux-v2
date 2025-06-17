@@ -5,6 +5,7 @@
 
 extern char **environ; // Глобальная переменная окружения
 
+// Обработка режима '+': загрузка переменных окружения из файла и использование getenv()
 void handle_plus_mode(const char *env_file) {
     printf("\n[Режим '+']: Чтение переменных из файла %s и использование getenv()\n", env_file);
 
@@ -16,7 +17,7 @@ void handle_plus_mode(const char *env_file) {
 
     char line[256];
     while (fgets(line, sizeof(line), file)) {
-        line[strcspn(line, "\n")] = '\0'; // Убираем символ новой строки
+        line[strcspn(line, "\n")] = '\0'; // Удаление символа новой строки
         char *value = getenv(line);
         if (value) {
             printf("%s=%s\n", line, value);
@@ -28,6 +29,7 @@ void handle_plus_mode(const char *env_file) {
     fclose(file);
 }
 
+// Обработка режима '*': вывод переданного массива envp
 void handle_star_mode(char *envp[]) {
     printf("\n[Режим '*']: Использование параметра envp\n");
 
@@ -36,6 +38,7 @@ void handle_star_mode(char *envp[]) {
     }
 }
 
+// Обработка режима '&': вывод всех переменных окружения через глобальный массив environ
 void handle_amp_mode() {
     printf("\n[Режим '&']: Использование глобальной переменной environ\n");
 
@@ -44,16 +47,17 @@ void handle_amp_mode() {
     }
 }
 
+// Главная функция программы
 int main(int argc, char *argv[], char *envp[]) {
-    // Вывод информации о процессе
+    // Вывод базовой информации о процессе
     printf("Имя программы: %s\n", argv[0]);
     printf("PID: %d\n", getpid());
     printf("PPID: %d\n", getppid());
 
-    // Определяем режим работы:
-    // Если передан второй аргумент - режим '+';
-    // если присутствует переменная CHILD_MODE, значит, запустили режим '*';
-    // иначе - режим '&'.
+    // Определение режима работы:
+    // - Если передан аргумент, используется режим '+'
+    // - Если переменная CHILD_MODE установлена, используется режим '*'
+    // - В остальных случаях применяется режим '&'
     if (argc > 1) {
         handle_plus_mode(argv[1]);
     }
