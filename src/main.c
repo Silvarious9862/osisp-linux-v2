@@ -105,7 +105,9 @@ static void sigint_handler(int sig) {
 // Обработка команд пользователя
 void handle_commands() {
     char command[10];
-    printf("Команды: '+' для запуска производителя, '-' для запуска потребителя, 'p' для просмотра состояния, 'q' для выхода.\n");
+    printf("Команды: '+' – запустить производителя, '-' – запустить потребителя, \n"
+           "         '>' – удалить производителя, '<' – удалить потребителя,\n"
+           "         'p' – показать статус, 'q' – выйти.\n");
     while (1) {
         if (fgets(command, sizeof(command), stdin) != NULL) {
             switch (command[0]) {
@@ -131,13 +133,37 @@ void handle_commands() {
                     }
                     break;
                 }
-                case 'p':
+                case '>': {
+                    if (producer_count > 0) {
+                        pid_t pid = producer_pids[producer_count - 1];
+                        kill(pid, SIGTERM);
+                        producer_count--;
+                        printf("Удален последний производитель (PID: %d).\n", pid);
+                    } else {
+                        printf("Нет активных производителей для удаления.\n");
+                    }
+                    break;
+                }
+                case '<': {
+                    if (consumer_count > 0) {
+                        pid_t pid = consumer_pids[consumer_count - 1];
+                        kill(pid, SIGTERM);
+                        consumer_count--;
+                        printf("Удален последний потребитель (PID: %d).\n", pid);
+                    } else {
+                        printf("Нет активных потребителей для удаления.\n");
+                    }
+                    break;
+                }
+                case 'p': {
                     print_status();
                     break;
-                case 'q':
+                }
+                case 'q': {
                     cleanup_resources();
                     printf("Завершение программы.\n");
                     exit(0);
+                }
                 default:
                     printf("Неизвестная команда: %s", command);
                     break;
