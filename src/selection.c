@@ -37,8 +37,8 @@ void add_file_entry(const char *full_path, off_t file_size) {
             exit(EXIT_FAILURE);
         }
     }
-    strncpy(file_list[file_count].full_path, full_path, PATH_MAX);
-    file_list[file_count].full_path[PATH_MAX - 1] = '\0';
+    // Используем snprintf для безопасного копирования строки с гарантированной нулевой терминаторой.
+    snprintf(file_list[file_count].full_path, PATH_MAX, "%s", full_path);
     file_list[file_count].file_size = file_size;
     file_count++;
 }

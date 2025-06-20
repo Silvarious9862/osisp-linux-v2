@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <openssl/md5.h>
+#include <openssl/evp.h>
 #include "verbose.h"
 
 // Структура file_entry для хранения пути и размера файла
@@ -22,7 +22,7 @@ typedef struct {
     char *hash;
 } file_hash;
 
-// Вычисление MD5-хеша файла
+// Вычисление MD5-хеша файла с использованием OpenSSL EVP API
 static char *compute_md5(const char *filename) {
     FILE *fp = fopen(filename, "rb");
     if (!fp) {
@@ -30,39 +30,52 @@ static char *compute_md5(const char *filename) {
         return NULL;
     }
 
-    MD5_CTX ctx;
-    if (MD5_Init(&ctx) != 1) {
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
         fclose(fp);
-        fprintf(stderr, "Ошибка инициализации MD5\n");
+        fprintf(stderr, "Ошибка создания контекста EVP\n");
+        return NULL;
+    }
+
+    // Инициализируем контекст для алгоритма MD5
+    if (EVP_DigestInit_ex(ctx, EVP_md5(), NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        fclose(fp);
+        fprintf(stderr, "Ошибка инициализации EVP-Digest для MD5\n");
         return NULL;
     }
 
     unsigned char buffer[4096];
     size_t bytes;
     while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
-        if (MD5_Update(&ctx, buffer, bytes) != 1) {
+        if (EVP_DigestUpdate(ctx, buffer, bytes) != 1) {
+            EVP_MD_CTX_free(ctx);
             fclose(fp);
-            fprintf(stderr, "Ошибка вычисления MD5\n");
+            fprintf(stderr, "Ошибка вычисления EVP-Digest для MD5\n");
             return NULL;
         }
     }
     fclose(fp);
 
-    unsigned char digest[MD5_DIGEST_LENGTH];
-    if (MD5_Final(digest, &ctx) != 1) {
-        fprintf(stderr, "Ошибка завершения вычисления MD5\n");
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digest_len = 0;
+    if (EVP_DigestFinal_ex(ctx, digest, &digest_len) != 1) {
+        EVP_MD_CTX_free(ctx);
+        fprintf(stderr, "Ошибка завершения EVP-Digest для MD5\n");
         return NULL;
     }
+    EVP_MD_CTX_free(ctx);
 
-    char *md5_str = malloc(MD5_DIGEST_LENGTH * 2 + 1);
+    // Формируем строку в шестнадцатеричном виде
+    char *md5_str = malloc(digest_len * 2 + 1);
     if (!md5_str) {
         perror("Ошибка выделения памяти для MD5");
         return NULL;
     }
-    for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
+    for (unsigned int i = 0; i < digest_len; i++) {
         sprintf(&md5_str[i * 2], "%02x", digest[i]);
     }
-    md5_str[MD5_DIGEST_LENGTH * 2] = '\0';
+    md5_str[digest_len * 2] = '\0';
     return md5_str;
 }
 

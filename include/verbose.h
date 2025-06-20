@@ -20,7 +20,7 @@ static void verbose_log(const char *message) {
 #define MAX_VERBOSE_PATH_LENGTH 50  // Максимальная длина пути
 
 // Логирование пути с обрезкой, если он слишком длинный
-static void verbose_log_path(const char *full_path) {
+static inline void verbose_log_path(const char *full_path) {
     if (verbose_flag) {
         char truncated_path[MAX_VERBOSE_PATH_LENGTH + 1];
         size_t len = strlen(full_path);
