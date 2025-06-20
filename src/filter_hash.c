@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <openssl/evp.h>
 #include "verbose.h"
+#include "md5.h"  // Наш собственный MD5
 
 // Структура file_entry для хранения пути и размера файла
 typedef struct {
@@ -22,60 +22,13 @@ typedef struct {
     char *hash;
 } file_hash;
 
-// Вычисление MD5-хеша файла с использованием OpenSSL EVP API
+// Вычисление MD5-хеша файла с использованием нашей реализации MD5
 static char *compute_md5(const char *filename) {
-    FILE *fp = fopen(filename, "rb");
-    if (!fp) {
-        perror("Ошибка открытия файла");
-        return NULL;
-    }
-
-    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-    if (ctx == NULL) {
-        fclose(fp);
-        fprintf(stderr, "Ошибка создания контекста EVP\n");
-        return NULL;
-    }
-
-    // Инициализируем контекст для алгоритма MD5
-    if (EVP_DigestInit_ex(ctx, EVP_md5(), NULL) != 1) {
-        EVP_MD_CTX_free(ctx);
-        fclose(fp);
-        fprintf(stderr, "Ошибка инициализации EVP-Digest для MD5\n");
-        return NULL;
-    }
-
-    unsigned char buffer[4096];
-    size_t bytes;
-    while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
-        if (EVP_DigestUpdate(ctx, buffer, bytes) != 1) {
-            EVP_MD_CTX_free(ctx);
-            fclose(fp);
-            fprintf(stderr, "Ошибка вычисления EVP-Digest для MD5\n");
-            return NULL;
-        }
-    }
-    fclose(fp);
-
-    unsigned char digest[EVP_MAX_MD_SIZE];
-    unsigned int digest_len = 0;
-    if (EVP_DigestFinal_ex(ctx, digest, &digest_len) != 1) {
-        EVP_MD_CTX_free(ctx);
-        fprintf(stderr, "Ошибка завершения EVP-Digest для MD5\n");
-        return NULL;
-    }
-    EVP_MD_CTX_free(ctx);
-
-    // Формируем строку в шестнадцатеричном виде
-    char *md5_str = malloc(digest_len * 2 + 1);
+    char *md5_str = my_md5_file(filename);
     if (!md5_str) {
-        perror("Ошибка выделения памяти для MD5");
-        return NULL;
+        // В случае ошибки возвращаем пустую строку
+        md5_str = strdup("");
     }
-    for (unsigned int i = 0; i < digest_len; i++) {
-        sprintf(&md5_str[i * 2], "%02x", digest[i]);
-    }
-    md5_str[digest_len * 2] = '\0';
     return md5_str;
 }
 
@@ -104,7 +57,7 @@ void filter_hash_list(void) {
         }
     }
 
-    // Сортировка файлов по MD5
+    // Сортировка файлов по MD5-хешу
     qsort(hash_array, file_count, sizeof(file_hash), compare_file_hash);
 
     file_entry *filtered_list = NULL;
@@ -118,16 +71,23 @@ void filter_hash_list(void) {
         while (j < file_count && strcmp(hash_array[j].hash, hash_array[i].hash) == 0)
             j++;
 
-        // Если MD5 совпадает у нескольких файлов, добавляем их в список
+        // Если MD5 совпадает у нескольких файлов, добавляем их в новый список
         if ((j - i) > 1) {
             for (size_t k = i; k < j; k++) {
                 if (filtered_count >= filtered_capacity) {
                     filtered_capacity = filtered_capacity ? filtered_capacity * 2 : 10;
-                    filtered_list = realloc(filtered_list, filtered_capacity * sizeof(file_entry));
-                    if (!filtered_list) {
+                    file_entry *temp = realloc(filtered_list, filtered_capacity * sizeof(file_entry));
+                    if (!temp) {
                         perror("Ошибка выделения памяти для filtered_list");
+                        // Освобождаем временные ресурсы при аварии:
+                        for (size_t m = 0; m < file_count; m++)
+                            free(hash_array[m].hash);
+                        free(hash_array);
+                        free(filtered_list);
+                        free(file_list);
                         exit(EXIT_FAILURE);
                     }
+                    filtered_list = temp;
                 }
                 filtered_list[filtered_count++] = hash_array[k].entry;
             }
@@ -137,9 +97,10 @@ void filter_hash_list(void) {
         }
         i = j;
     }
-    if (!unique_flag) verbose_log("Не найдены");
+    if (!unique_flag)
+        verbose_log("Не найдены");
 
-    // Очистка временных данных
+    // Освобождение временных данных
     for (size_t i = 0; i < file_count; i++) {
         free(hash_array[i].hash);
     }

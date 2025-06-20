@@ -16,6 +16,7 @@ void filter_cmp_list(void);
 void print_filtered_file_list(void);
 void interactive_delete_duplicates(void);
 void non_interactive_delete_duplicates(void);
+void cleanup_selection(void);
 
 // Определение структуры фильтрации
 typedef void (*filter_func_t)(void);
@@ -45,6 +46,8 @@ unsigned long long min_size = 0;
 unsigned long long max_size = 0;
 
 int main(int argc, char *argv[]) {
+    atexit(cleanup_selection);
+
     Options opts = parse_arguments(argc, argv);
 
     // Инициализация параметров
@@ -57,6 +60,11 @@ int main(int argc, char *argv[]) {
     no_interact_flag = opts.no_interact;
     min_size = opts.min_size;
     max_size = opts.max_size;
+
+    if (deletion_flag && summary_flag) {
+        printf("Флаги -m и -d несовместимы\n");
+        return EXIT_FAILURE;
+    }
 
     scan_directory(opts.start_path);
     filter_size_list();
@@ -72,9 +80,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Вывод или удаление файлов в зависимости от флагов
-    if (deletion_flag && summary_flag) 
-        printf("Флаги -m и -d несовместимы\n");
-    else if (deletion_flag && no_interact_flag) 
+    
+    if (deletion_flag && no_interact_flag) 
         non_interactive_delete_duplicates();
     else if (deletion_flag) 
         interactive_delete_duplicates();

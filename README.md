@@ -4,9 +4,9 @@
 
 ## Перед началом работы  
   
-Убедитесь, что у вас установлены libmagic и openssl
+Убедитесь, что у вас установлены libmagic
 ```bash
-sudo dnf install file-devel openssl-devel
+sudo dnf install file-devel
 ```
 Соберите проект с использованием **Makefile**
 

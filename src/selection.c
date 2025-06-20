@@ -26,18 +26,21 @@ size_t file_list_capacity = 0;
 void add_file_entry(const char *full_path, off_t file_size);
 void scan_directory(const char *path);
 void filter_size_list(void);  // Фильтрация по размеру
+void cleanup_selection(void); // Функция для очистки ресурсов
 
 // Добавление файла в глобальный список
 void add_file_entry(const char *full_path, off_t file_size) {
     if (file_count >= file_list_capacity) {
         file_list_capacity = file_list_capacity ? file_list_capacity * 2 : 10;
-        file_list = realloc(file_list, file_list_capacity * sizeof(file_entry));
-        if (!file_list) {
+        file_entry *tmp = realloc(file_list, file_list_capacity * sizeof(file_entry));
+        if (!tmp) {
             perror("Ошибка выделения памяти");
+            free(file_list);
             exit(EXIT_FAILURE);
         }
+        file_list = tmp;
     }
-    // Используем snprintf для безопасного копирования строки с гарантированной нулевой терминаторой.
+    // Безопасное копирование строки с гарантированной нулевой терминаторой.
     snprintf(file_list[file_count].full_path, PATH_MAX, "%s", full_path);
     file_list[file_count].file_size = file_size;
     file_count++;
@@ -113,4 +116,14 @@ void filter_size_list(void) {
         file_list[j++] = file_list[i];  // Сохранение подходящих файлов
     }
     file_count = j;
+}
+
+// Функция для очистки выделенной памяти
+void cleanup_selection(void) {
+    if (file_list != NULL) {
+        free(file_list);
+        file_list = NULL;
+        file_count = 0;
+        file_list_capacity = 0;
+    }
 }

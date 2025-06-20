@@ -11,7 +11,8 @@ TARGET := $(OUT_DIR)/bdupes
 
 # Исходные файлы
 SRCS := $(SRC_DIR)/main.c $(SRC_DIR)/args.c $(SRC_DIR)/result.c $(SRC_DIR)/selection.c $(SRC_DIR)/deletion.c \
-		$(SRC_DIR)/filter_size.c $(SRC_DIR)/filter_mime.c $(SRC_DIR)/filter_hash.c $(SRC_DIR)/filter_cmp.c
+		$(SRC_DIR)/filter_size.c $(SRC_DIR)/filter_mime.c $(SRC_DIR)/filter_hash.c $(SRC_DIR)/filter_cmp.c \
+		$(SRC_DIR)/md5.c
 
 # Компилятор
 CC := gcc
@@ -20,7 +21,7 @@ CC := gcc
 COMMON_CFLAGS := -D_GNU_SOURCE -D_POSIX_C_SOURCE=200112L -W -Wall -Wextra -std=c11 -pedantic \
 				 -Wno-unused-parameter -Wno-unused-variable -I$(LIB_DIR) -lpthread
 
-LIBS := -lcrypto -lmagic -lpthread
+LIBS := -lmagic -lpthread
 
 # Флаги сборки debug/release
 ifeq ($(BUILD), debug)

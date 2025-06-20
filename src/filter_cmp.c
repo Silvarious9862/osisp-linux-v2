@@ -64,7 +64,7 @@ void filter_cmp_list(void) {
         exit(EXIT_FAILURE);
     }
 
-    // Сравнение файлов попарно
+    // Сравнение файлов попарно. Если файлы идентичны, отмечаем их.
     for (size_t i = 0; i < file_count; i++) {
         for (size_t j = i + 1; j < file_count; j++) {
             if (file_list[i].file_size == file_list[j].file_size) {
@@ -86,12 +86,14 @@ void filter_cmp_list(void) {
         if (keep_flags[i]) {
             if (filtered_count >= filtered_capacity) {
                 filtered_capacity = filtered_capacity ? filtered_capacity * 2 : 10;
-                filtered_list = realloc(filtered_list, filtered_capacity * sizeof(file_entry));
-                if (!filtered_list) {
+                file_entry *temp = realloc(filtered_list, filtered_capacity * sizeof(file_entry));
+                if (!temp) {
                     perror("Ошибка выделения памяти для filtered_list");
                     free(keep_flags);
+                    free(filtered_list);
                     exit(EXIT_FAILURE);
                 }
+                filtered_list = temp;
             }
             filtered_list[filtered_count++] = file_list[i];
         } else {
@@ -100,10 +102,13 @@ void filter_cmp_list(void) {
         }
     }
 
-    if (!unique_flag) verbose_log("Не найдены");
+    if (!unique_flag)
+        verbose_log("Не найдены");
 
     free(keep_flags);
     free(file_list);
+
     file_list = filtered_list;
     file_count = filtered_count;
+    file_list_capacity = filtered_capacity;
 }

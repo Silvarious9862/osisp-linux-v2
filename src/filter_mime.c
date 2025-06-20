@@ -16,7 +16,7 @@ extern file_entry *file_list;
 extern size_t file_count;
 extern size_t file_list_capacity;
 
-// Определение функций модуля
+// Прототипы функций модуля
 void filter_mime_list(void);
 void print_filtered_file_list(void);
 
@@ -85,8 +85,8 @@ void filter_mime_list(void) {
             if (count > 1) {
                 if (filtered_count >= filtered_capacity) {
                     filtered_capacity = filtered_capacity ? filtered_capacity * 2 : 10;
-                    filtered_list = realloc(filtered_list, filtered_capacity * sizeof(file_entry));
-                    if (!filtered_list) {
+                    file_entry *temp = realloc(filtered_list, filtered_capacity * sizeof(file_entry));
+                    if (!temp) {
                         perror("Ошибка выделения памяти");
                         for (size_t m = 0; m < group_size; m++)
                             free(mime_array[m]);
@@ -94,9 +94,11 @@ void filter_mime_list(void) {
                         magic_close(cookie);
                         exit(EXIT_FAILURE);
                     }
+                    filtered_list = temp;
                 }
                 filtered_list[filtered_count++] = file_list[i + k];
             } else {
+                // Файл считается уникальным – выводим его путь
                 verbose_log_path(file_list[i].full_path);
                 unique_flag = 1;
             }
@@ -109,12 +111,14 @@ void filter_mime_list(void) {
 
         i = j;
     }
+
     if (!unique_flag)
         verbose_log("Не найдены");
 
     free(file_list);
     file_list = filtered_list;
     file_count = filtered_count;
+    file_list_capacity = filtered_capacity;  // Обновление вместимости списка
 
     magic_close(cookie);
 }
