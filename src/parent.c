@@ -20,7 +20,7 @@ int cmp_env(const void *a, const void *b) {
     return strcmp(*s1, *s2);
 }
 
-// Копирование и сортировка переменных окружения родителя (с установкой локали "C")
+// Копирование и сортировка переменных окружения родителя
 void print_sorted_environment(void) {
     // Подсчитываем количество переменных
     int count = 0;
@@ -50,11 +50,6 @@ void print_sorted_environment(void) {
 }
 
 // Функция формирования сокращённого окружения для дочернего процесса.
-// Файл filename содержит список имён переменных (по одной на строке), например:
-// SHELL
-// HOME
-// HOSTNAME
-// ...
 char **create_reduced_env(const char *filename) {
     FILE *fp = fopen(filename, "r");
     if (!fp) {
