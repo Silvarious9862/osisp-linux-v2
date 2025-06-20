@@ -3,6 +3,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <signal.h>
@@ -33,7 +34,7 @@ void check_deadlock() {
     }
 }
 
-// Поток для периодической проверки дедлоков
+// Поток для периодической проверки дедлоков. Цикл завершается, как только terminate_flag установлен.
 void* deadlock_monitor(void* arg) {
     while (!terminate_flag) {
         check_deadlock();
@@ -71,6 +72,7 @@ void init_resources() {
 
 // Очистка IPC-ресурсов и завершение дочерних процессов
 void cleanup_resources() {
+    // Перед очисткой убеждаемся, что флаг завершения уже выставлен
     terminate_flag = 1;
     for (int i = 0; i < producer_count; i++) {
         kill(producer_pids[i], SIGTERM);
@@ -93,22 +95,27 @@ void print_status() {
     printf("Производителей: %d, Потребителей: %d\n", producer_count, consumer_count);
 }
 
-// Обработчик SIGINT для корректной очистки ресурсов
+// Обработчик SIGINT теперь просто устанавливает флаг завершения.
 static void sigint_handler(int sig) {
     (void)sig;
-    printf("\nПолучен SIGINT. Запускается очистка ресурсов...\n");
-    cleanup_resources();
-    printf("Ресурсы очищены. Завершается программа.\n");
-    exit(0);
+    printf("\nПолучен SIGINT. Инициируется завершение работы...\n");
+    terminate_flag = 1;
 }
 
-// Обработка команд пользователя
+// Обработчик SIGCHLD для сбора завершённых дочерних процессов
+void sigchld_handler(int signo) {
+    (void) signo;
+    while (waitpid(-1, NULL, WNOHANG) > 0)
+        ;
+}
+
+// Обработка команд пользователя. Цикл завершается, если получен сигнал завершения (terminate_flag) или команда 'q'.
 void handle_commands() {
     char command[10];
     printf("Команды: '+' – запустить производителя, '-' – запустить потребителя, \n"
            "         '>' – удалить производителя, '<' – удалить потребителя,\n"
            "         'p' – показать статус, 'q' – выйти.\n");
-    while (1) {
+    while (!terminate_flag) {
         if (fgets(command, sizeof(command), stdin) != NULL) {
             switch (command[0]) {
                 case '+': {
@@ -160,15 +167,17 @@ void handle_commands() {
                     break;
                 }
                 case 'q': {
-                    cleanup_resources();
-                    printf("Завершение программы.\n");
-                    exit(0);
+                    printf("Запрошено завершение программы.\n");
+                    terminate_flag = 1;
+                    break;
                 }
                 default:
                     printf("Неизвестная команда: %s", command);
                     break;
             }
         } else {
+            if (terminate_flag)
+                break;
             printf("Ошибка ввода команды. Попробуйте снова.\n");
         }
     }
@@ -185,15 +194,35 @@ int main() {
         exit(1);
     }
 
+    // Регистрация обработчика SIGCHLD для избежания зомби-процессов
+    struct sigaction sa_chld;
+    sa_chld.sa_handler = sigchld_handler;
+    sigemptyset(&sa_chld.sa_mask);
+    sa_chld.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &sa_chld, NULL) == -1) {
+        perror("sigaction(SIGCHLD)");
+        exit(1);
+    }
+
     printf("Запуск основного процесса.\n");
     init_resources();
 
-    // Запуск потока мониторинга дедлоков
+    // Запуск потока для мониторинга дедлоков; он завершится, когда terminate_flag станет истинным.
     pthread_t monitor_thread;
-    pthread_create(&monitor_thread, NULL, deadlock_monitor, NULL);
+    if (pthread_create(&monitor_thread, NULL, deadlock_monitor, NULL) != 0) {
+        perror("pthread_create");
+        exit(1);
+    }
 
+    // Обработка команд пользователя;
+    // цикл завершится, если получен сигнал завершения (SIGINT или команда 'q')
     handle_commands();
 
+    // Ожидание завершения потока мониторинга
     pthread_join(monitor_thread, NULL);
+
+    // Очистка ресурсов перед выходом
+    cleanup_resources();
+    printf("Ресурсы очищены. Завершается программа.\n");
     return 0;
 }
