@@ -15,6 +15,27 @@
 volatile int terminate_flag = 0;
 MessageQueue queue;
 
+    // Поток для мониторинга возможных дедлоков
+void* deadlock_monitor(void* arg) {
+    (void)arg;
+    while (!terminate_flag) {
+        pthread_mutex_lock(&queue.mutex);
+        int count = queue.count;
+        int capacity = queue.capacity;
+        int added_count = queue.added_count;
+        int removed_count = queue.removed_count;
+        pthread_mutex_unlock(&queue.mutex);
+
+        if (count == 0 && added_count > 0)
+            printf("--- Нет элементов в очереди, проверьте работу производителей ---\n");
+        if (count == capacity && removed_count == 0)
+            printf("--- Очередь заполнена, проверьте работу потребителей ---\n");
+
+        sleep(5);
+    }
+    return NULL;
+}
+
 // Обработчик SIGINT (Ctrl-C) для завершения работы
 static void sigint_handler(int sig) {
     (void)sig; 
@@ -43,6 +64,9 @@ int main() {
         perror("Ошибка инициализации очереди");
         return 1;
     }
+
+    pthread_t monitor_thread;
+    pthread_create(&monitor_thread, NULL, deadlock_monitor, NULL);
 
     pthread_t producers[MAX_THREADS], consumers[MAX_THREADS];
     int prod_count = 0, cons_count = 0;
@@ -158,6 +182,8 @@ int main() {
     for (int i = 0; i < cons_count; i++) {
         pthread_join(consumers[i], NULL);
     }
+
+    pthread_join(monitor_thread, NULL);
 
     destroy_queue(&queue);
     printf("Программа завершена.\n");
