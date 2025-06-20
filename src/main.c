@@ -42,6 +42,8 @@ void* deadlock_monitor(void* arg) {
     while (!terminate_flag) {
         if (queue.count == 0 && queue.added_count > 0)
             printf("--- Нет элементов в очереди, проверьте работу производителей ---\n");
+        if (queue.count == queue.capacity && queue.removed_count == 0)
+            printf("--- Очередь заполнена, проверьте работу потребителей ---\n");
         sleep(5);
     }
     return NULL;
@@ -145,10 +147,10 @@ int main() {
             else
                 printf("Ошибка при увеличении очереди\n");
         } else if (command[0] == '<') {
-            /*if (queue.count != 0) {
+            if (queue.count != 0) {
                 printf("Нельзя уменьшить очередь, пока она не пуста (занято %d элементов)\n", queue.count);
                 continue;
-            }*/
+            }
             if (queue.capacity <= 2) {
                 printf("Минимальная ёмкость очереди равна 2. Уменьшение невозможно.\n");
                 continue;
