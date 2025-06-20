@@ -69,9 +69,12 @@ int main() {
     int prod_count = 0, cons_count = 0;
     char command[10];
 
+    // Обновлённая справка: добавлены команды для удаления потоков
     printf("Команды:\n"
            "  + : добавить поток-производитель\n"
            "  - : добавить поток-потребитель\n"
+           "  P : удалить последний поток-производитель\n"
+           "  C : удалить последний поток-потребитель\n"
            "  > : увеличить размер очереди\n"
            "  < : уменьшить размер очереди\n"
            "  p : вывести состояние очереди\n"
@@ -105,6 +108,34 @@ int main() {
             } else {
                 cons_count++;
             }
+        }
+        // Новая команда: удаление последнего добавленного потока-производителя (LIFO)
+        else if (command[0] == 'P') {
+            if (prod_count > 0) {
+                if (pthread_cancel(producers[prod_count - 1]) == 0) {
+                    pthread_join(producers[prod_count - 1], NULL);
+                    prod_count--;
+                    printf("Удален поток-производитель [%d].\n", prod_count+1);
+                } else {
+                    printf("Ошибка при удалении потока-производителя.\n");
+                }
+            } else {
+                printf("Нет активных потоков-производителей для удаления.\n");
+            }
+        }
+        // Новая команда: удаление последнего добавленного потока-потребителя (LIFO)
+        else if (command[0] == 'C') {
+            if (cons_count > 0) {
+                if (pthread_cancel(consumers[cons_count - 1]) == 0) {
+                    pthread_join(consumers[cons_count - 1], NULL);
+                    cons_count--;
+                    printf("Удален поток-потребитель [%d].\n", cons_count+1);
+                } else {
+                    printf("Ошибка при удалении потока-потребителя.\n");
+                }
+            } else {
+                printf("Нет активных потоков-потребителей для удаления.\n");
+            }
         } else if (command[0] == 'p') {
             print_status();
         } else if (command[0] == '>') {
@@ -114,10 +145,10 @@ int main() {
             else
                 printf("Ошибка при увеличении очереди\n");
         } else if (command[0] == '<') {
-            if (queue.count != 0) {
+            /*if (queue.count != 0) {
                 printf("Нельзя уменьшить очередь, пока она не пуста (занято %d элементов)\n", queue.count);
                 continue;
-            }
+            }*/
             if (queue.capacity <= 2) {
                 printf("Минимальная ёмкость очереди равна 2. Уменьшение невозможно.\n");
                 continue;
