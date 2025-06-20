@@ -11,4 +11,3 @@ export PATH=/usr/bin:/bin
 
 
 export CHILD_PATH=$(pwd)/build/release
-
