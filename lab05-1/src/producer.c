@@ -12,6 +12,7 @@ extern volatile int terminate_flag;   // Глобальный флаг заве�
 extern ThreadMessageQueue queue;      // Глобальная очередь
 extern pthread_mutex_t resize_mutex;  // Мьютекс для защиты при изменении размера
 extern volatile int pause_processing;
+extern volatile int producer_exit_flags[];
 
 // Функция вычисления контрольной суммы
 unsigned short calculate_hash(Message *message) {
@@ -27,8 +28,8 @@ void *producer_thread(void *arg) {
     int id = *(int*)arg;
     free(arg);
     
-    while (!terminate_flag) {
-        Message message;
+    while (!terminate_flag && !producer_exit_flags[id-1]) {
+        Message message = {0};
         message.type = 'A' + (rand() % 26);
 
         // Определение размера сообщения
