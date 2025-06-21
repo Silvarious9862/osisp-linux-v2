@@ -11,6 +11,7 @@
 extern volatile int terminate_flag;
 extern ThreadMessageQueue queue;
 extern pthread_mutex_t resize_mutex;
+extern volatile int consumer_exit_flags[];
 
 // Прототип функции вычисления контрольной суммы
 unsigned short calculate_hash(Message *message);
@@ -19,7 +20,7 @@ unsigned short calculate_hash(Message *message);
 void *consumer_thread(void *arg) {
     int id = *(int*)arg;
     free(arg);
-    while (!terminate_flag) {
+    while (!terminate_flag && !consumer_exit_flags[id - 1]) {
         pthread_mutex_lock(&resize_mutex);
         pthread_mutex_unlock(&resize_mutex);
         

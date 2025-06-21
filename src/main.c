@@ -11,24 +11,14 @@
 #include "producer_consumer.h"
 
 #define MAX_THREADS 100
+volatile int producer_exit_flags[MAX_THREADS] = {0};
+volatile int consumer_exit_flags[MAX_THREADS] = {0};
 
 // Глобальные переменные управления очередью и потоками
 volatile int terminate_flag = 0;
 ThreadMessageQueue queue;
 pthread_mutex_t resize_mutex = PTHREAD_MUTEX_INITIALIZER;
 volatile int pause_processing = 0;
-
-// Вывод текущего состояния очереди
-void print_status() {
-    pthread_mutex_lock(&queue.mutex);
-    printf("\n--- Состояние очереди ---\n");
-    printf("Ёмкость очереди: %d\n", queue.capacity);
-    printf("Элементов в очереди: %d\n", queue.count);
-    printf("Свободных слотов: %d\n", queue.capacity - queue.count);
-    printf("Добавлено сообщений: %d\n", queue.added_count);
-    printf("Извлечено сообщений: %d\n", queue.removed_count);
-    pthread_mutex_unlock(&queue.mutex);
-}
 
 // Обработчик SIGINT (Ctrl-C) для корректного завершения
 static void sigint_handler(int sig) {
@@ -111,35 +101,41 @@ int main() {
                 cons_count++;
             }
         }
-        // Новая команда: удаление последнего добавленного потока-производителя (LIFO)
         else if (command[0] == 'P') {
             if (prod_count > 0) {
-                if (pthread_cancel(producers[prod_count - 1]) == 0) {
-                    pthread_join(producers[prod_count - 1], NULL);
-                    prod_count--;
-                    printf("Удален поток-производитель [%d].\n", prod_count+1);
-                } else {
-                    printf("Ошибка при удалении потока-производителя.\n");
-                }
+                // Устанавливаем флаг завершения для последнего производителя
+                producer_exit_flags[prod_count - 1] = 1;
+
+                // Ждем корректного завершения потока
+                pthread_join(producers[prod_count - 1], NULL);
+                prod_count--;
+                printf("Удален поток-производитель [%d].\n", prod_count + 1);
             } else {
                 printf("Нет активных потоков-производителей для удаления.\n");
             }
         }
-        // Новая команда: удаление последнего добавленного потока-потребителя (LIFO)
         else if (command[0] == 'C') {
             if (cons_count > 0) {
-                if (pthread_cancel(consumers[cons_count - 1]) == 0) {
-                    pthread_join(consumers[cons_count - 1], NULL);
-                    cons_count--;
-                    printf("Удален поток-потребитель [%d].\n", cons_count+1);
-                } else {
-                    printf("Ошибка при удалении потока-потребителя.\n");
-                }
+                // Устанавливаем флаг завершения для последнего потребителя
+                consumer_exit_flags[cons_count - 1] = 1;
+
+                // Ждем корректного завершения потока
+                pthread_join(consumers[cons_count - 1], NULL);
+                cons_count--;
+                printf("Удален поток-потребитель [%d].\n", cons_count + 1);
             } else {
                 printf("Нет активных потоков-потребителей для удаления.\n");
             }
         } else if (command[0] == 'p') {
-            print_status();
+                pthread_mutex_lock(&queue.mutex);
+                printf("\n--- Состояние очереди ---\n");
+                printf("Ёмкость очереди: %d\n", queue.capacity);
+                printf("Элементов в очереди: %d\n", queue.count);
+                printf("Свободных слотов: %d\n", queue.capacity - queue.count);
+                printf("Добавлено сообщений: %d\n", queue.added_count);
+                printf("Извлечено сообщений: %d\n", queue.removed_count);
+                printf("Производителей: %d, потребителей: %d\n", prod_count, cons_count);
+                pthread_mutex_unlock(&queue.mutex);
         } else if (command[0] == '>') {
             int new_capacity = queue.capacity + 1;
             if (resize_thread_queue(&queue, new_capacity) == 0)

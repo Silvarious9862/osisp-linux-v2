@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <string.h>
 
 // Глобальный мьютекс для защиты операций изменения размера очереди
 extern pthread_mutex_t resize_mutex;
@@ -51,9 +52,15 @@ int resize_thread_queue(ThreadMessageQueue *q, int new_capacity) {
         return -1;
     }
     q->buffer = new_buffer;
+
+    // Если буфер увеличился — обнуляем новые элементы
+    if (new_capacity > old_capacity) {
+        memset(q->buffer + old_capacity, 0, (new_capacity - old_capacity) * sizeof(Message));
+    }
+
     q->capacity = new_capacity;
 
-    // Коррекция head и tail для сохранения элементов при изменении размера
+    // Если очередь не начинается с нулевого индекса и в ней что-то есть — выполняем переупорядочивание
     if (q->head != 0 && q->count > 0) {
         Message *temp = malloc(q->capacity * sizeof(Message));
         if (temp) {
